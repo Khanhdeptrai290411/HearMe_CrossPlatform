@@ -69,7 +69,7 @@ export default function HomeScreen() {
       </View>
 
       {/* Core Values */}
-      <View style={styles.section}>
+      {/* <View style={styles.section}>
         <Text style={styles.sectionTitle}>Our Core Values</Text>
         <View style={styles.valuesGrid}>
           {[
@@ -87,7 +87,7 @@ export default function HomeScreen() {
             </View>
           ))}
         </View>
-      </View>
+      </View> */}
 
       {/* Our Story Section */}
       <View style={styles.section}>

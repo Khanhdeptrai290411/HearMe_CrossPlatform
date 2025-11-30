@@ -80,7 +80,7 @@ const createMediaObject = (asset: ImagePicker.ImagePickerAsset) => {
 };
 
 export function FlashcardCourseForm({ mode, courseId }: FlashcardCourseFormProps) {
-  const { token } = useAuth();
+  const { token, signOut } = useAuth();
   const router = useRouter();
 
   const isEditing = mode === 'edit' && Boolean(courseId);
@@ -325,25 +325,39 @@ export function FlashcardCourseForm({ mode, courseId }: FlashcardCourseFormProps
       setIsSubmitting(true);
 
       // Save or update course
-      const courseResponse = await fetch(
-        isEditing ? getCourseDetailUrl(courseId!) : getCourseCreateUrl(),
-        {
-          method: isEditing ? 'PUT' : 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            title: formData.title,
-            description: formData.description,
-            nameschool: formData.nameschool,
-            namecourse: formData.namecourse,
-          }),
+      const courseUrl = isEditing ? getCourseDetailUrl(courseId!) : getCourseCreateUrl();
+      const courseResponse = await fetch(courseUrl, {
+        method: isEditing ? 'PUT' : 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
         },
-      );
+        body: JSON.stringify({
+          title: formData.title,
+          description: formData.description,
+          nameschool: formData.nameschool,
+          namecourse: formData.namecourse,
+        }),
+      });
 
       if (!courseResponse.ok) {
-        throw new Error('Failed to save course');
+        const errorText = await courseResponse.text();
+        let errorMessage = 'Failed to save course';
+        
+        if (courseResponse.status === 401) {
+          errorMessage = 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
+          console.warn('401 Unauthorized - Token may be expired');
+        } else {
+          try {
+            const errorData = JSON.parse(errorText);
+            errorMessage = errorData.detail || errorData.message || errorMessage;
+          } catch {
+            errorMessage = errorText || errorMessage;
+          }
+        }
+        
+        console.error(`Failed to save course (${courseResponse.status}):`, errorMessage);
+        throw new Error(errorMessage);
       }
 
       const savedCourse = await courseResponse.json();
@@ -396,15 +410,50 @@ export function FlashcardCourseForm({ mode, courseId }: FlashcardCourseFormProps
         });
 
         if (!quizResponse.ok) {
-          throw new Error(`Failed to ${quiz.quizzes_id ? 'update' : 'create'} quiz`);
+          const errorText = await quizResponse.text();
+          let errorMessage = `Failed to ${quiz.quizzes_id ? 'update' : 'create'} quiz`;
+          
+          if (quizResponse.status === 401) {
+            errorMessage = 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
+            console.warn('401 Unauthorized when saving quiz - Token may be expired');
+          } else {
+            try {
+              const errorData = JSON.parse(errorText);
+              errorMessage = errorData.detail || errorData.message || errorMessage;
+            } catch {
+              errorMessage = errorText || errorMessage;
+            }
+          }
+          
+          console.error(`Failed to ${quiz.quizzes_id ? 'update' : 'create'} quiz (${quizResponse.status}):`, errorMessage);
+          throw new Error(errorMessage);
         }
       }
 
       Alert.alert('Thành công', isEditing ? 'Đã cập nhật khóa học.' : 'Đã tạo khóa học mới.');
       router.replace('/flashcards');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to save course', error);
-      Alert.alert('Lỗi', 'Không thể lưu khóa học. Vui lòng thử lại.');
+      const errorMessage = error?.message || 'Không thể lưu khóa học. Vui lòng thử lại.';
+      
+      // Nếu là lỗi 401, đề xuất đăng nhập lại
+      if (errorMessage.includes('hết hạn') || errorMessage.includes('401')) {
+        Alert.alert(
+          'Phiên đăng nhập hết hạn',
+          'Vui lòng đăng nhập lại để tiếp tục.',
+          [
+            { text: 'Hủy', style: 'cancel' },
+            {
+              text: 'Đăng nhập lại',
+              onPress: () => {
+                signOut();
+              },
+            },
+          ]
+        );
+      } else {
+        Alert.alert('Lỗi', errorMessage);
+      }
     } finally {
       setIsSubmitting(false);
     }

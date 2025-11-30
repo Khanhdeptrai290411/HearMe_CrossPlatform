@@ -38,6 +38,7 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const isTablet = SCREEN_WIDTH >= 768;
 const isWeb = Platform.OS === 'web';
 const isSmallScreen = SCREEN_WIDTH < 600;
+const WebVideoElement: any = 'video';
 
 interface LessonInfo {
   modelId: number;
@@ -71,15 +72,85 @@ export default function Lesson({
   const [isProcessing, setIsProcessing] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [facing, setFacing] = useState<CameraType>("front");
+  const webCameraVideoRef = useRef<HTMLVideoElement | null>(null);
+  const webCameraStreamRef = useRef<MediaStream | null>(null);
+  const webCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [webCameraError, setWebCameraError] = useState<string | null>(null);
+  const [webVideoUrl, setWebVideoUrl] = useState<string | null>(null);
+  const [webVideoStatus, setWebVideoStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const isMountedRef = useRef(true); // Track component mounted state
   const isCapturingRef = useRef(false); // Track if already capturing
+  const cameraReadyRef = useRef(false); // Track camera ready state (use ref for immediate updates)
   const statusResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null); // track delayed status reset
+  const currentApiAbortControllerRef = useRef<AbortController | null>(null); // Track current API call to cancel if needed
+  const currentLessonPathRef = useRef<string>(apiLessonPath || ''); // Track current lesson path to ignore stale responses
+  const isApiCallPendingRef = useRef(false); // Track if API call is pending (more reliable than isProcessing state)
 
   const lessonTitle = `${lessonInfo.chapterName}: ${lessonName}`;
+  // Model Family (id: 1) cần 120 frame, Color (id: 2) cần 60 frame
+  const REQUIRED_FRAME_COUNT = lessonInfo.modelId === 1 ? 120 : 60;
+
+  const stopWebCameraStream = () => {
+    if (webCameraStreamRef.current) {
+      webCameraStreamRef.current.getTracks().forEach((track) => track.stop());
+      webCameraStreamRef.current = null;
+    }
+    if (webCameraVideoRef.current) {
+      try {
+        webCameraVideoRef.current.srcObject = null;
+      } catch {}
+    }
+  };
+
+  const startWebCameraStream = async (): Promise<boolean> => {
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setWebCameraError("Trình duyệt không hỗ trợ camera");
+      return false;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user" },
+        audio: false,
+      });
+      webCameraStreamRef.current = stream;
+      if (webCameraVideoRef.current) {
+        try {
+          (webCameraVideoRef.current as HTMLVideoElement).srcObject = stream;
+          await webCameraVideoRef.current.play();
+        } catch {}
+      }
+      cameraReadyRef.current = true;
+      setWebCameraError(null);
+      return true;
+    } catch (error: any) {
+      console.error("Failed to start web camera:", error);
+      if (error?.name === "NotAllowedError" || error?.name === "PermissionDeniedError") {
+        setWebCameraError("Bạn đã chặn quyền camera. Hãy cho phép trong trình duyệt.");
+      } else {
+        setWebCameraError("Không thể mở camera trên trình duyệt.");
+      }
+      return false;
+    }
+  };
 
   // Tối ưu tốc độ chụp khác nhau giữa iPad và điện thoại
   const CAPTURE_QUALITY = isTablet ? 0.6 : 0.35; // giảm chất lượng trên điện thoại để chụp nhanh hơn
   const FRAME_DELAY_MS = isTablet ? 20 : 40; // giãn nhịp trên điện thoại để camera kịp xử lý
+
+  // Helper function để safely stop recording
+  const safeStopRecording = () => {
+    if (!isMountedRef.current || !cameraRef.current) {
+      return;
+    }
+    try {
+      if ((cameraRef.current as any)?.stopRecording) {
+        (cameraRef.current as any).stopRecording();
+      }
+    } catch (error) {
+      // Ignore errors - camera might already be unmounted
+      console.log("Error stopping recording (safe):", error);
+    }
+  };
 
   // Track component mount/unmount per lesson
   useEffect(() => {
@@ -87,17 +158,56 @@ export default function Lesson({
     isMountedRef.current = true;
     isCapturingRef.current = false; // Reset capture flag
     
+    // Cancel any pending API calls khi chuyển bài
+    if (currentApiAbortControllerRef.current) {
+      currentApiAbortControllerRef.current.abort();
+      currentApiAbortControllerRef.current = null;
+    }
+    isApiCallPendingRef.current = false;
+    
+    // Update current lesson path
+    currentLessonPathRef.current = apiLessonPath || '';
+    
+    // Reset camera state khi chuyển bài
+    setCameraEnabled(false);
+    cameraReadyRef.current = false;
+    setStatus("Hãy làm hành động");
+    setIsProcessing(false);
+    setIsRecording(false);
+    setCountdown(3);
+    
+    // Reset camera ref để đảm bảo camera mới được khởi tạo
+    // Không set null trực tiếp, để React tự quản lý qua key prop
+    
     return () => {
       console.log("Lesson component unmounting:", lessonName);
       isMountedRef.current = false;
       isCapturingRef.current = false;
+      
+      // Cancel any pending API calls
+      if (currentApiAbortControllerRef.current) {
+        currentApiAbortControllerRef.current.abort();
+        currentApiAbortControllerRef.current = null;
+      }
+      isApiCallPendingRef.current = false;
+      
+      // Tắt camera trước khi unmount
+      setCameraEnabled(false);
+      cameraReadyRef.current = false;
+      setIsProcessing(false);
+      setIsRecording(false);
+      
+      // Clear timers
       if (statusResetTimeoutRef.current) {
         clearTimeout(statusResetTimeoutRef.current);
         statusResetTimeoutRef.current = null;
       }
-      // Stop any ongoing capture
-      setIsProcessing(false);
-      setIsRecording(false);
+      
+      // Reset camera ref - safely stop recording
+      safeStopRecording();
+      if (isWeb) {
+        stopWebCameraStream();
+      }
     };
   }, [lessonPath]); // Re-mount khi đổi bài
 
@@ -108,8 +218,40 @@ export default function Lesson({
     }
   }, [cameraEnabled]);
 
+  // Cleanup khi camera tắt
+  useEffect(() => {
+    if (!cameraEnabled) {
+      // Reset tất cả state khi camera tắt
+      isCapturingRef.current = false;
+      setIsProcessing(false);
+      setIsRecording(false);
+      cameraReadyRef.current = false;
+      
+      // Clear timers
+      if (statusResetTimeoutRef.current) {
+        clearTimeout(statusResetTimeoutRef.current);
+        statusResetTimeoutRef.current = null;
+      }
+      
+      // Dừng recording nếu có
+      safeStopRecording();
+      if (isWeb) {
+        stopWebCameraStream();
+      }
+    } else {
+      // Khi bật camera, reset ready state và đợi callback
+      cameraReadyRef.current = false;
+      // Không cần delay ở đây vì onCameraReady sẽ set cameraReadyRef.current = true
+    }
+  }, [cameraEnabled]);
+
   // Gửi khung hình đến API
   const sendFramesToAPI = async () => {
+    if (isWeb) {
+      await sendWebFrames();
+      return;
+    }
+
     // Kiểm tra component và camera còn mounted không
     if (!isMountedRef.current || !cameraRef.current || !apiLessonPath || !cameraEnabled) {
       console.log("Component/Camera not mounted or disabled");
@@ -119,6 +261,49 @@ export default function Lesson({
     // CHẶN NẾU ĐANG CHỤP RỒI
     if (isCapturingRef.current) {
       console.log("Already capturing, skipping...");
+      return;
+    }
+
+    // Kiểm tra camera ref sẵn sàng
+    if (!cameraRef.current) {
+      console.log("Camera ref not ready, skipping capture");
+      return;
+    }
+
+    // Đợi camera ready (đặc biệt quan trọng sau khi chuyển bài)
+    // iPad cần đợi lâu hơn
+    if (!cameraReadyRef.current) {
+      console.log("Waiting for camera to be ready...");
+      // Đợi tối đa: iPad 5 giây, phone 3 giây
+      const maxWaitTime = isTablet ? 50 : 30;
+      for (let i = 0; i < maxWaitTime; i++) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        if (cameraReadyRef.current || !isMountedRef.current || !cameraEnabled) break;
+      }
+      if (!cameraReadyRef.current) {
+        console.warn("Camera not ready after waiting, proceeding anyway");
+        // Vẫn tiếp tục nhưng có thể sẽ fail - user cần bật lại camera
+      }
+    }
+    
+    // Thêm delay sau khi camera ready để đảm bảo camera hoàn toàn sẵn sàng
+    // iPad cần delay lâu hơn
+    if (cameraReadyRef.current) {
+      const additionalDelay = isTablet ? 1500 : 500;
+      console.log(`Camera ready, waiting additional ${additionalDelay}ms for stability...`);
+      await new Promise(resolve => setTimeout(resolve, additionalDelay));
+    }
+    
+    // Kiểm tra lại camera ref và permission trước khi capture
+    if (!cameraRef.current || !permission?.granted || !cameraEnabled) {
+      console.log("Camera not available for capture:", {
+        hasRef: !!cameraRef.current,
+        hasPermission: !!permission?.granted,
+        enabled: cameraEnabled,
+      });
+      isCapturingRef.current = false;
+      setIsProcessing(false);
+      setIsRecording(false);
       return;
     }
 
@@ -133,18 +318,19 @@ export default function Lesson({
 
     try {
       const frames: string[] = [];
-      const frameCount = 60;
+      const frameCount = REQUIRED_FRAME_COUNT;
       let consecutiveErrors = 0;
       const maxConsecutiveErrors = 5;
       
-      // Thời gian dự kiến: 60 frames × 30ms = 1800ms ≈ 2 giây
-      const estimatedTime = 2000; // ms
+      // Thời gian dự kiến: frameCount × 30ms
+      const estimatedTime = frameCount * 30; // ms
       const startTime = Date.now();
       
-      console.log("Starting capture 60 frames...");
+      console.log(`Starting capture ${frameCount} frames...`);
       
       // Đếm ngược từ 3
-      for (let i = 3; i > 0; i--) {
+      const countdownSeconds = 1;
+      for (let i = countdownSeconds; i > 0; i--) {
         if (isMountedRef.current) {
           setStatus(`${i}...`);
           await new Promise(resolve => setTimeout(resolve, 1000));
@@ -153,20 +339,28 @@ export default function Lesson({
       
       if (isMountedRef.current) {
         setStatus("Đang quay... 📸");
-        try { (player as any)?.play?.(); } catch {}
+        // Đảm bảo video chạy khi bắt đầu capture
+        try {
+          if ((player as any)?.play) {
+            (player as any).play();
+          }
+        } catch (error) {
+          console.log("Error playing video at capture start:", error);
+        }
       }
       
       let usedVideoPipeline = false;
 
-      // Prefer: quay video 2s và trích 60 frame trên điện thoại (nhanh hơn)
-      if (!isTablet && (cameraRef.current as any)?.recordAsync && getThumbnailAsync) {
+      // Prefer: quay video và trích frameCount frame trên iOS (cả iPad và iPhone - nhanh và ổn định hơn)
+      // Android: skip vì recordAsync không ổn định, dùng fallback (chụp ảnh liên tiếp)
+      if (Platform.OS === 'ios' && (cameraRef.current as any)?.recordAsync && getThumbnailAsync) {
         try {
           const recPromise = (cameraRef.current as any).recordAsync?.({
             maxDuration: Math.ceil(estimatedTime / 1000),
             quality: '480p',
           });
           setTimeout(() => {
-            try { (cameraRef.current as any)?.stopRecording?.(); } catch {}
+            safeStopRecording();
           }, estimatedTime + 200);
           const videoObj = await recPromise;
           const videoUri = videoObj?.uri ?? '';
@@ -194,11 +388,61 @@ export default function Lesson({
 
       // Fallback: chụp ảnh liên tiếp như cũ
       if (!usedVideoPipeline) {
+        // Luôn test capture trên iPad để đảm bảo camera thực sự sẵn sàng
+        // Trên phone chỉ test nếu camera chưa ready
+        const shouldTest = isTablet || !cameraReadyRef.current;
+        
+        if (cameraRef.current && permission?.granted && cameraEnabled && shouldTest) {
+          try {
+            console.log("Testing camera capture before starting...");
+            const testPhoto = await cameraRef.current.takePictureAsync({
+              base64: true,
+              quality: CAPTURE_QUALITY,
+              skipProcessing: true,
+              imageType: 'jpg',
+            });
+            if (testPhoto?.base64) {
+              console.log("✅ Test capture successful, camera is ready");
+              cameraReadyRef.current = true;
+              // Đợi thêm một chút để camera ổn định - iPad cần lâu hơn
+              const stabilityDelay = isTablet ? 1000 : 200;
+              await new Promise(resolve => setTimeout(resolve, stabilityDelay));
+            } else {
+              console.warn("Test capture returned no base64, but continuing...");
+              // Vẫn tiếp tục, có thể camera sẽ hoạt động
+              const continueDelay = isTablet ? 1200 : 300;
+              await new Promise(resolve => setTimeout(resolve, continueDelay));
+            }
+          } catch (testError: any) {
+            console.warn("❌ Test capture failed, but continuing:", testError?.message || testError);
+            // Không dừng lại, chỉ đợi thêm một chút - iPad cần lâu hơn
+            const errorDelay = isTablet ? 2000 : 500;
+            await new Promise(resolve => setTimeout(resolve, errorDelay));
+            // Không retry nữa để tránh delay quá lâu
+            // Camera có thể vẫn hoạt động trong loop chính
+          }
+        } else if (cameraReadyRef.current && !isTablet) {
+          console.log("Camera already ready, skipping test capture");
+        }
+        
         while (frames.length < frameCount && consecutiveErrors < maxConsecutiveErrors) {
           if (!isMountedRef.current || !cameraRef.current || !cameraEnabled) {
             console.log("Component/Camera unmounted during capture, stopping...");
             break;
           }
+          
+          // Đảm bảo video vẫn chạy trong quá trình capture
+          if (frames.length % 10 === 0) {
+            try {
+              // Player được định nghĩa sau, nhưng sẽ có trong scope khi function được gọi
+              if ((player as any)?.play) {
+                (player as any).play();
+              }
+            } catch (error) {
+              // Ignore
+            }
+          }
+          
           try {
             const photo = await cameraRef.current.takePictureAsync({
               base64: true,
@@ -228,57 +472,161 @@ export default function Lesson({
         }
       }
       
-      setIsRecording(false);
-      isCapturingRef.current = false; // Reset flag
+      await processCapturedFrames(frames, frameCount);
+    } catch (error) {
+      console.error("Lỗi gửi khung hình đến API:", error);
+      setStatus("Lỗi gửi khung hình");
+      setIsProcessing(false);
+      isCapturingRef.current = false; // Reset flag on error
+    }
+  };
 
-      // Kiểm tra component vẫn mounted
-      if (!isMountedRef.current) {
-        console.log("Component unmounted, aborting send");
-        return;
-      }
-
-      console.log(`Total frames captured: ${frames.length}/${frameCount}`);
-      
-      // CHỈ GỬI KHI ĐỦ 60 FRAMES
-      if (frames.length < 60) {
-        if (isMountedRef.current) {
-          setStatus(`Chụp lại (${frames.length}/60)`);
-          setIsProcessing(false);
-          // Tự động reset sau 2 giây
-          statusResetTimeoutRef.current = setTimeout(() => {
-            if (isMountedRef.current) {
-              setStatus("Hãy làm hành động");
-            }
-          }, 2000);
-          // clear ref sau khi chạy
-          statusResetTimeoutRef.current && setTimeout(() => (statusResetTimeoutRef.current = null), 0);
-        }
-        return;
-      }
-      
+  const sendWebFrames = async () => {
+    if (!isMountedRef.current || !cameraEnabled || !apiLessonPath) {
+      console.log("Web capture skipped - invalid state");
+      return;
+    }
+    const videoEl = webCameraVideoRef.current;
+    if (!videoEl) {
       if (isMountedRef.current) {
-        setStatus("Đang gửi...");
+        setStatus("Bật camera để luyện tập");
+      }
+      return;
+    }
+    if (videoEl.readyState < 2) {
+      console.log("Web camera video not ready");
+      if (isMountedRef.current) {
+        setStatus("Camera đang khởi động...");
+      }
+      return;
+    }
+    if (isCapturingRef.current) {
+      console.log("Already capturing on web, skipping...");
+      return;
+    }
+
+    isCapturingRef.current = true;
+    setIsProcessing(true);
+    setIsRecording(true);
+
+    try {
+      const frames: string[] = [];
+      const frameCount = REQUIRED_FRAME_COUNT;
+      const canvas =
+        webCanvasRef.current ??
+        (typeof document !== "undefined" ? document.createElement("canvas") : null);
+      if (!canvas) {
+        throw new Error("Không thể tạo canvas trên web");
+      }
+      if (!webCanvasRef.current) {
+        webCanvasRef.current = canvas;
+      }
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        throw new Error("Canvas context không khả dụng");
+      }
+      const width = videoEl.videoWidth || 640;
+      const height = videoEl.videoHeight || 480;
+      canvas.width = width;
+      canvas.height = height;
+
+      for (let i = 3; i > 0; i--) {
+        if (!isMountedRef.current) break;
+        setStatus(`${i}...`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
 
-      const modelId = lessonInfo.modelId;
-      if (!modelId) {
-        console.error("Missing modelId in lessonInfo:", lessonInfo);
-        throw new Error("Missing modelId");
+      if (isMountedRef.current) {
+        setStatus("Đang quay... 📸");
       }
 
-      console.log("Sending frames with modelId:", modelId, "lessonPath:", apiLessonPath);
-      
-      const token = await AsyncStorage.getItem('token');
-      if (!token) {
-        console.log("No authentication token found");
+      const FRAME_DELAY_MS = 10;
+      for (let i = 0; i < frameCount; i++) {
+        if (!isMountedRef.current || !cameraEnabled) {
+          break;
+        }
+        ctx.drawImage(videoEl, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+        frames.push(dataUrl);
+        await new Promise(resolve => setTimeout(resolve, FRAME_DELAY_MS));
       }
-      
-      const processVideoUrl = getApiUrl(API_CONFIG.ENDPOINTS.PROCESS_VIDEO);
-      console.log("Sending to:", processVideoUrl);
-      
-      const response = await fetch(processVideoUrl, {
+
+      await processCapturedFrames(frames, frameCount);
+    } catch (error) {
+      console.error("Web capture error:", error);
+      setStatus("Lỗi camera web");
+      setIsProcessing(false);
+      isCapturingRef.current = false;
+      setIsRecording(false);
+    }
+  };
+
+  const processCapturedFrames = async (frames: string[], frameCount: number) => {
+    setIsRecording(false);
+    isCapturingRef.current = false;
+
+    if (!isMountedRef.current) {
+      console.log("Component unmounted, aborting send");
+      setIsProcessing(false);
+      return;
+    }
+
+    // Clear any pending status reset timeout khi bắt đầu process mới
+    if (statusResetTimeoutRef.current) {
+      clearTimeout(statusResetTimeoutRef.current);
+      statusResetTimeoutRef.current = null;
+    }
+
+    console.log(`Total frames captured: ${frames.length}/${frameCount}`);
+
+    if (frames.length < REQUIRED_FRAME_COUNT) {
+      setStatus(`Chụp lại (${frames.length}/${REQUIRED_FRAME_COUNT})`);
+      setIsProcessing(false);
+      statusResetTimeoutRef.current = setTimeout(() => {
+        if (isMountedRef.current && !isProcessing) {
+          setStatus("Hãy làm hành động");
+        }
+      }, 2000);
+      return;
+    }
+
+    // Đảm bảo isProcessing vẫn true khi đang gửi API
+    setStatus("Đang gửi...");
+
+    const modelId = lessonInfo.modelId;
+    if (!modelId) {
+      console.error("Missing modelId in lessonInfo:", lessonInfo);
+      throw new Error("Missing modelId");
+    }
+
+    console.log("Sending frames with modelId:", modelId, "lessonPath:", apiLessonPath);
+
+    // Cancel any previous API call
+    if (currentApiAbortControllerRef.current) {
+      currentApiAbortControllerRef.current.abort();
+    }
+
+    // Create new AbortController for this API call
+    const abortController = new AbortController();
+    currentApiAbortControllerRef.current = abortController;
+    const currentLessonPath = apiLessonPath || '';
+    
+    // Mark API call as pending
+    isApiCallPendingRef.current = true;
+
+    const token = await AsyncStorage.getItem('token');
+    if (!token) {
+      console.log("No authentication token found");
+    }
+
+    const processVideoUrl = getApiUrl(API_CONFIG.ENDPOINTS.PROCESS_VIDEO);
+    console.log("Sending to:", processVideoUrl);
+
+    let response: Response;
+    try {
+      response = await fetch(processVideoUrl, {
         method: "POST",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${token}`
         },
@@ -286,73 +634,153 @@ export default function Lesson({
           frames,
           lessonPath: apiLessonPath,
           modelId: parseInt(String(modelId))
-        })
+        }),
+        signal: abortController.signal
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error("API Error:", errorData);
-        setStatus("Lỗi xử lý video");
-        throw new Error(`HTTP error! Status: ${response.status}`);
+    } catch (error: any) {
+      // Handle abort or network errors
+      if (error.name === 'AbortError' || abortController.signal.aborted) {
+        console.log("API call aborted, ignoring");
+        setIsProcessing(false);
+        if (currentApiAbortControllerRef.current === abortController) {
+          isApiCallPendingRef.current = false;
+          currentApiAbortControllerRef.current = null;
+        }
+        return;
       }
+      // Check if lesson changed
+      if (currentLessonPathRef.current !== currentLessonPath || !isMountedRef.current) {
+        console.log("Lesson changed during fetch, ignoring error");
+        setIsProcessing(false);
+        if (currentApiAbortControllerRef.current === abortController) {
+          isApiCallPendingRef.current = false;
+          currentApiAbortControllerRef.current = null;
+        }
+        return;
+      }
+      // Mark API call as failed
+      if (currentApiAbortControllerRef.current === abortController) {
+        isApiCallPendingRef.current = false;
+      }
+      throw error;
+    }
 
-      const result = await response.json();
-      console.log("API Response:", result);
-      
-      const match = result.status === "Match!" || result.status === "match" || result.match === true;
+    // Check if this API call was aborted or lesson changed
+    if (abortController.signal.aborted || currentLessonPathRef.current !== currentLessonPath || !isMountedRef.current) {
+      console.log("API call aborted or lesson changed, ignoring response");
+      setIsProcessing(false);
+      return;
+    }
 
-      if (isMountedRef.current) {
-        setStatus(match ? "Khớp!" : "Không khớp");
+    const contentType = response.headers.get('content-type') || '';
+    const rawPayload = await response.text();
+    let parsedPayload: any = null;
+    if (rawPayload && contentType.includes('application/json')) {
+      try {
+        parsedPayload = JSON.parse(rawPayload);
+      } catch (parseError) {
+        console.warn("Không thể parse JSON từ API:", parseError, rawPayload);
+      }
+    } else if (rawPayload) {
+      try {
+        parsedPayload = JSON.parse(rawPayload);
+      } catch {
+        parsedPayload = null;
+      }
+    }
+
+    // Double check after async operations
+    if (abortController.signal.aborted || currentLessonPathRef.current !== currentLessonPath || !isMountedRef.current) {
+      console.log("API call aborted or lesson changed after fetch, ignoring response");
+      setIsProcessing(false);
+      if (currentApiAbortControllerRef.current === abortController) {
+        isApiCallPendingRef.current = false;
+        currentApiAbortControllerRef.current = null;
+      }
+      return;
+    }
+
+    if (!response.ok) {
+      console.error("API Error:", parsedPayload ?? rawPayload);
+      if (isMountedRef.current && currentLessonPathRef.current === currentLessonPath) {
+        setStatus("Lỗi xử lý video");
       }
       setIsProcessing(false);
+      if (currentApiAbortControllerRef.current === abortController) {
+        isApiCallPendingRef.current = false;
+        currentApiAbortControllerRef.current = null;
+      }
+      throw new Error(`HTTP error! Status: ${response.status}`);
+    }
 
-      if (match) {
-        console.log("✅ Match successful! Moving to next lesson...");
-        // Tắt camera khi khớp
-        setCameraEnabled(false);
-        
-        // Bắt đầu đếm ngược chuyển bài
-        let time = 3;
+    const result = parsedPayload ?? {};
+    console.log("API Response:", result);
+
+    // Final check before updating UI
+    if (!isMountedRef.current || currentLessonPathRef.current !== currentLessonPath) {
+      console.log("Component unmounted or lesson changed, ignoring API response");
+      setIsProcessing(false);
+      if (currentApiAbortControllerRef.current === abortController) {
+        isApiCallPendingRef.current = false;
+        currentApiAbortControllerRef.current = null;
+      }
+      return;
+    }
+
+    const match = result.status === "Match!" || result.status === "match" || result.match === true;
+
+    setStatus(match ? "Khớp!" : "Không khớp");
+    setIsProcessing(false);
+    
+    // Clear abort controller after successful processing
+    if (currentApiAbortControllerRef.current === abortController) {
+      isApiCallPendingRef.current = false;
+      currentApiAbortControllerRef.current = null;
+    }
+
+    if (match) {
+      console.log("✅ Match successful! Moving to next lesson...");
+      
+      // Cancel any pending API calls
+      if (currentApiAbortControllerRef.current) {
+        currentApiAbortControllerRef.current.abort();
+        currentApiAbortControllerRef.current = null;
+      }
+      isApiCallPendingRef.current = false;
+      
+      safeStopRecording();
+      stopWebCameraStream();
+      setCameraEnabled(false);
+
+      let time = 3;
+      setCountdown(time);
+      const countdownInterval = setInterval(() => {
+        time -= 1;
         if (isMountedRef.current) {
           setCountdown(time);
         }
-        const countdownInterval = setInterval(() => {
-          time -= 1;
+        if (time <= 0) {
+          clearInterval(countdownInterval);
           if (isMountedRef.current) {
-            setCountdown(time);
+            isCapturingRef.current = false;
+            setIsProcessing(false);
+            setIsRecording(false);
+            goToNextLesson();
           }
-          if (time <= 0) {
-            clearInterval(countdownInterval);
-            if (isMountedRef.current) {
-              goToNextLesson();
-              setStatus("Hãy làm hành động");
-              setCountdown(3);
-            }
-          }
-        }, 1000);
-      } else {
-        console.log("❌ No match. Try again!");
-        // Không khớp thì giữ nguyên, để user thử lại
-        if (isMountedRef.current) {
-          // Clear hẹn giờ cũ nếu có
-          if (statusResetTimeoutRef.current) {
-            clearTimeout(statusResetTimeoutRef.current);
-            statusResetTimeoutRef.current = null;
-          }
-          statusResetTimeoutRef.current = setTimeout(() => {
-            if (isMountedRef.current) {
-              setStatus("Hãy làm hành động");
-            }
-          }, 2000);
-          // clear ref sau khi chạy
-          statusResetTimeoutRef.current && setTimeout(() => (statusResetTimeoutRef.current = null), 0);
         }
+      }, 1000);
+    } else {
+      console.log("❌ No match. Try again!");
+      // Chỉ reset status nếu không đang processing
+      if (statusResetTimeoutRef.current) {
+        clearTimeout(statusResetTimeoutRef.current);
+        statusResetTimeoutRef.current = null;
       }
-    } catch (error) {
-      console.error("Lỗi gửi khung hình đến API:", error);
-      setStatus("Lỗi gửi khung hình");
-      setIsProcessing(false);
-      isCapturingRef.current = false; // Reset flag on error
+      statusResetTimeoutRef.current = setTimeout(() => {
+        if (isMountedRef.current && !isProcessing && !isCapturingRef.current) {
+          setStatus("Hãy làm hành động");
+        }
+      }, 2000);
     }
   };
 
@@ -382,21 +810,28 @@ export default function Lesson({
     let startDelay: ReturnType<typeof setTimeout> | null = null;
     
     if (cameraEnabled && apiLessonPath && !isProcessing && isMountedRef.current) {
+      const cameraSourceReady = () => (isWeb ? !!webCameraVideoRef.current : !!cameraRef.current);
       console.log("Setting up capture timer for lesson:", lessonName);
       
-      // Đợi 3 giây sau khi bật camera, sau đó chụp ngay lần đầu
+      // Đợi sau khi bật camera để camera sẵn sàng
+      // iPad cần delay lâu hơn (8s) vì camera khởi tạo chậm hơn và cần thời gian ổn định
+      const initialDelay = isWeb ? 1000 : isTablet ? 8000 : 4000;
       startDelay = setTimeout(() => {
-        if (isMountedRef.current && cameraEnabled && !isCapturingRef.current) {
+        if (isMountedRef.current && cameraEnabled && !isProcessing && !isCapturingRef.current && !isApiCallPendingRef.current && cameraSourceReady()) {
           console.log("First capture triggered");
           sendFramesToAPI();
+        } else {
+          console.log("Skipping first capture - not ready (processing:", isProcessing, "capturing:", isCapturingRef.current, "apiPending:", isApiCallPendingRef.current, ")");
         }
-      }, 3000);
+      }, initialDelay);
       
       // Sau đó chụp mỗi 10 giây (đủ thời gian: 3s countdown + 2s capture + 5s buffer)
       interval = setInterval(() => {
-        if (isMountedRef.current && cameraEnabled && !isCapturingRef.current) {
+        if (isMountedRef.current && cameraEnabled && !isProcessing && !isCapturingRef.current && !isApiCallPendingRef.current && cameraSourceReady()) {
           console.log("Interval capture triggered");
           sendFramesToAPI();
+        } else {
+          console.log("Interval capture skipped - processing:", isProcessing, "capturing:", isCapturingRef.current, "apiPending:", isApiCallPendingRef.current);
         }
       }, 10000); // 10 giây
     }
@@ -409,7 +844,7 @@ export default function Lesson({
   }, [cameraEnabled, apiLessonPath, lessonPath]); // Thêm lessonPath để reset khi đổi bài
 
   const handleToggleCamera = async () => {
-    if (!cameraEnabled && !permission?.granted) {
+    if (!isWeb && !cameraEnabled && !permission?.granted) {
       const result = await requestPermission();
       if (!result.granted) {
         Alert.alert("Quyền camera", "Cần quyền truy cập camera để thực hành");
@@ -418,15 +853,63 @@ export default function Lesson({
     }
     
     // Nếu đang chụp, dừng lại trước
-    if (isProcessing || isRecording) {
+    if (isProcessing || isRecording || isCapturingRef.current) {
+      // Dừng mọi capture đang chạy
+      isCapturingRef.current = false;
       setIsProcessing(false);
       setIsRecording(false);
+      
+      // Dừng recording nếu có
+      if (!isWeb && cameraRef.current) {
+        try {
+          if ((cameraRef.current as any)?.stopRecording) {
+            (cameraRef.current as any).stopRecording();
+          }
+        } catch (error) {
+          console.log("Error stopping recording:", error);
+        }
+      }
+      
+      // Clear timers
+      if (statusResetTimeoutRef.current) {
+        clearTimeout(statusResetTimeoutRef.current);
+        statusResetTimeoutRef.current = null;
+      }
+      
       // Đợi một chút để process dừng hoàn toàn
       await new Promise(resolve => setTimeout(resolve, 500));
     }
+
+    if (isWeb) {
+      if (!cameraEnabled) {
+        const started = await startWebCameraStream();
+        if (started) {
+          setCameraEnabled(true);
+          setStatus("Hãy làm hành động");
+        }
+      } else {
+        stopWebCameraStream();
+        setCameraEnabled(false);
+        cameraReadyRef.current = false;
+        setStatus("Hãy làm hành động");
+      }
+      return;
+    }
     
-    setCameraEnabled((prev) => !prev);
-    setStatus("Hãy làm hành động");
+    setCameraEnabled((prev) => {
+      if (prev) {
+        // Đang tắt camera - reset tất cả state
+        isCapturingRef.current = false;
+        setIsProcessing(false);
+        setIsRecording(false);
+        cameraReadyRef.current = false;
+        setStatus("Hãy làm hành động");
+      } else {
+        // Đang bật camera - reset ready state để đợi callback
+        cameraReadyRef.current = false;
+      }
+      return !prev;
+    });
   };
 
   // Tạo đường dẫn video từ public folder - memoize để tránh re-render
@@ -436,12 +919,135 @@ export default function Lesson({
     return url;
   }, [lessonPath]);
 
+  useEffect(() => {
+    if (!isWeb) {
+      return;
+    }
+    const controller = new AbortController();
+    let objectUrl: string | null = null;
+
+    setWebVideoStatus('loading');
+    setWebVideoUrl(null);
+
+    const preload = async () => {
+      try {
+        const response = await fetch(videoSource, { signal: controller.signal });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const blob = await response.blob();
+        objectUrl = URL.createObjectURL(blob);
+        if (!controller.signal.aborted) {
+          setWebVideoUrl(objectUrl);
+          setWebVideoStatus('idle');
+        } else if (objectUrl) {
+          URL.revokeObjectURL(objectUrl);
+        }
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        console.error("Failed to preload video for web:", videoSource, error);
+        setWebVideoStatus('error');
+      }
+    };
+
+    preload();
+
+    return () => {
+      controller.abort();
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+      setWebVideoUrl(null);
+    };
+  }, [videoSource]);
+
   // Memoize player để tránh tạo lại mỗi render
   const player = useVideoPlayer(videoSource, (player: any) => {
-    player.loop = true;
-    player.muted = true; // tránh xung đột audio khi camera ghi video
-    player.play();
+    if (player) {
+      player.loop = true;
+      player.muted = true; // tránh xung đột audio khi camera ghi video
+      // Play ngay khi player được tạo
+      setTimeout(() => {
+        try {
+          player.play();
+        } catch (error) {
+          console.log("Error playing video in callback:", error);
+        }
+      }, 100);
+    }
   });
+
+  // Đảm bảo video chạy liên tục khi lessonPath thay đổi
+  useEffect(() => {
+    if (player) {
+      player.loop = true;
+      player.muted = true;
+      // Đảm bảo video chạy ngay khi lesson thay đổi
+      const playVideo = () => {
+        try {
+          if (player && isMountedRef.current) {
+            player.play();
+          }
+        } catch (error) {
+          console.log("Error playing video:", error);
+        }
+      };
+      // Play ngay
+      playVideo();
+      // Retry nhiều lần để đảm bảo video start
+      const retryTimer = setTimeout(playVideo, 200);
+      const retryTimer2 = setTimeout(playVideo, 500);
+      const retryTimer3 = setTimeout(playVideo, 1000);
+      return () => {
+        clearTimeout(retryTimer);
+        clearTimeout(retryTimer2);
+        clearTimeout(retryTimer3);
+      };
+    }
+  }, [lessonPath, player]);
+
+  // Đảm bảo video luôn chạy (check định kỳ và restart nếu cần)
+  useEffect(() => {
+    if (!player) return;
+    
+    const checkAndPlay = () => {
+      try {
+        // Kiểm tra và play nếu video bị pause
+        if (player && isMountedRef.current) {
+          // Không có cách trực tiếp check playing state, nên cứ play lại
+          // expo-video sẽ tự handle nếu đang play rồi
+          player.play();
+        }
+      } catch (error) {
+        // Ignore errors
+      }
+    };
+    
+    // Check mỗi 1 giây (tăng tần suất) để đảm bảo video không bị pause
+    const interval = setInterval(checkAndPlay, 1000);
+    
+    return () => clearInterval(interval);
+  }, [player]);
+
+  // Đảm bảo video play khi camera được bật
+  useEffect(() => {
+    if (player && cameraEnabled) {
+      // Khi camera bật, đảm bảo video vẫn chạy
+      const playVideo = () => {
+        try {
+          if (player && isMountedRef.current) {
+            player.play();
+          }
+        } catch (error) {
+          console.log("Error playing video when camera enabled:", error);
+        }
+      };
+      playVideo();
+      // Retry sau một chút
+      const timer = setTimeout(playVideo, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [cameraEnabled, player]);
 
   return (
     <View style={styles.container}>
@@ -452,27 +1058,104 @@ export default function Lesson({
       <View style={styles.contentRow}>
         {/* Video mẫu */}
         <View style={styles.videoSection}>
-        <Text style={styles.sectionTitle}>📺 Video Mẫu</Text>
-          <VideoView
-            player={player}
-            style={styles.video}
-            nativeControls={false}
-            allowsPictureInPicture={false}
-          />
-          
+          <Text style={styles.sectionTitle}>📺 Video Mẫu</Text>
+          {isWeb ? (
+            <View style={styles.webVideoWrapper}>
+              {webVideoStatus === 'loading' && (
+                <Text style={styles.webVideoStatus}>Đang tải video mẫu...</Text>
+              )}
+              {webVideoStatus === 'error' && (
+                <Text style={styles.webVideoStatusError}>Không tải được video mẫu</Text>
+              )}
+              {webVideoUrl && webVideoStatus === 'idle' && (
+                <WebVideoElement
+                  key={webVideoUrl}
+                  src={webVideoUrl}
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  controls={false}
+                  style={styles.webVideo as any}
+                  onError={(event: any) => {
+                    console.error('Web video failed to load', videoSource, event);
+                    setWebVideoStatus('error');
+                  }}
+                />
+              )}
+            </View>
+          ) : (
+            <VideoView
+              player={player}
+              style={styles.video}
+              nativeControls={false}
+              allowsPictureInPicture={false}
+              contentFit="contain"
+            />
+          )}
         </View>
 
         {/* Camera thực hành */}
         <View style={styles.cameraSection}>
           <Text style={styles.sectionTitle}>🎥 Thực Hành</Text>
           <View style={styles.cameraContainer}>
-            {cameraEnabled && permission?.granted ? (
+            {isWeb ? (
+              cameraEnabled ? (
+                <View style={styles.webCameraWrapper}>
+                  <WebVideoElement
+                    ref={(node: any) => {
+                      webCameraVideoRef.current = node;
+                      if (node && webCameraStreamRef.current && node.srcObject !== webCameraStreamRef.current) {
+                        node.srcObject = webCameraStreamRef.current;
+                        node.play?.().catch(() => {});
+                      }
+                    }}
+                    autoPlay
+                    muted
+                    playsInline
+                    controls={false}
+                    style={styles.webCamera as any}
+                  />
+                  {webCameraError && (
+                    <Text style={styles.webCameraError}>{webCameraError}</Text>
+                  )}
+                </View>
+              ) : (
+                <View style={styles.cameraPlaceholder}>
+                  <Text style={styles.placeholderIcon}>💻</Text>
+                  <Text style={styles.placeholderText}>
+                    {webCameraError ?? "Nhấn nút bên dưới để bật camera"}
+                  </Text>
+                </View>
+              )
+            ) : cameraEnabled && permission?.granted ? (
               <CameraView
+                key={`camera-${lessonPath}`}
                 ref={cameraRef}
                 style={styles.camera}
                 facing={facing}
                 mode="video"
                 videoQuality="480p"
+                onCameraReady={() => {
+                  console.log("Camera ready callback fired");
+                  // Delay trước khi set ready để đảm bảo camera hoàn toàn khởi tạo
+                  // iPad cần delay lâu hơn
+                  const delay = isTablet ? 2000 : 800;
+                  setTimeout(() => {
+                    if (isMountedRef.current && cameraRef.current) {
+                      cameraReadyRef.current = true;
+                      console.log(`Camera fully ready and set (after ${delay}ms delay)`);
+                      // Thêm delay nữa sau khi set ready, đặc biệt trên iPad
+                      if (isTablet) {
+                        setTimeout(() => {
+                          if (isMountedRef.current) {
+                            console.log("Camera stability period completed on iPad");
+                          }
+                        }, 500);
+                      }
+                    }
+                  }, delay);
+                }}
               />
             ) : (
               <View style={styles.cameraPlaceholder}>
@@ -581,6 +1264,59 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 8,
     color: '#374151',
+  },
+  webVideoWrapper: {
+    width: '100%',
+    height: isSmallScreen ? 250 : isTablet ? SCREEN_HEIGHT * 0.7 : 220,
+    backgroundColor: '#000',
+    borderRadius: 6,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  webVideo: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'contain' as any,
+    backgroundColor: '#000',
+  },
+  webCameraWrapper: {
+    width: '100%',
+    height: isSmallScreen ? 300 : isTablet ? '100%' : 340,
+    backgroundColor: '#000',
+    borderRadius: 6,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  webCamera: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover' as any,
+    transform: 'scaleX(-1)' as any,
+  },
+  webCameraError: {
+    position: 'absolute',
+    bottom: 12,
+    left: 12,
+    right: 12,
+    color: '#f87171',
+    fontWeight: '600',
+    textAlign: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+  },
+  webVideoStatus: {
+    color: '#f3f4f6',
+    fontWeight: '600',
+  },
+  webVideoStatusError: {
+    color: '#f87171',
+    fontWeight: '700',
+    textAlign: 'center',
   },
   video: {
     width: '100%',

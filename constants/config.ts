@@ -16,7 +16,29 @@ const getLocalIP = (): string => {
   // Để tìm IP:
   // - Windows: chạy `ipconfig` trong CMD, tìm IPv4 Address
   // - Mac/Linux: chạy `ifconfig` hoặc `ip addr`
-  return '192.168.1.100'; // THAY ĐỔI IP NÀY
+  return '192.168.1.3'; // IP từ Wireless LAN adapter Wi-Fi
+};
+
+const normalizeAssetPath = (path: string): string => {
+  if (!path) return '/';
+  return path.startsWith('/') ? path : `/${path}`;
+};
+
+const encodeAssetPath = (path: string): string => {
+  const normalized = normalizeAssetPath(path);
+  return normalized
+    .split('/')
+    .map((segment, index) => {
+      if (index === 0 && segment === '') {
+        return '';
+      }
+      try {
+        return encodeURIComponent(decodeURIComponent(segment));
+      } catch {
+        return encodeURIComponent(segment);
+      }
+    })
+    .join('/');
 };
 
 // Xác định Backend URL dựa trên platform
@@ -24,6 +46,14 @@ const getBackendUrl = (): string => {
   if (__DEV__) {
     // Development mode
     const localIP = getLocalIP();
+
+    // Trường hợp chạy trên web: sử dụng origin hiện tại và dựa vào proxy dev-server để tránh CORS
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.location?.origin) {
+        return window.location.origin;
+      }
+      return 'http://localhost:8081';
+    }
     
     // Nếu có debuggerHost từ Expo, có nghĩa là đang chạy trên thiết bị thật
     if (Constants.expoConfig?.hostUri) {
@@ -39,7 +69,7 @@ const getBackendUrl = (): string => {
       // iOS simulator có thể dùng localhost
       return 'http://localhost:8000';
     } else {
-      // Web - dùng localhost
+      // Các trường hợp còn lại - fallback về localhost backend
       return 'http://localhost:8000';
     }
   }
@@ -120,7 +150,11 @@ export const getVideoUrl = (path: string): string => {
   if (path.startsWith('http')) {
     return path;
   }
-  return `${API_CONFIG.METRO_URL}${path}`;
+  const encodedPath = encodeAssetPath(path);
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.origin) {
+    return `${window.location.origin}${encodedPath}`;
+  }
+  return `${API_CONFIG.METRO_URL}${encodedPath}`;
 };
 
 export const getDictionaryListUrl = (): string => getApiUrl(API_CONFIG.ENDPOINTS.DICTIONARY_LIST);
