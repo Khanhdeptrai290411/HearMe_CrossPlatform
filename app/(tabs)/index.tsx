@@ -1,649 +1,741 @@
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions, Platform } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import {
+  View, Text, StyleSheet, ScrollView, Image,
+  TouchableOpacity, Dimensions, Platform, Animated,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { getVideoUrl } from '@/constants/config';
+import { NB } from '@/constants/theme';
+import { useLanguage } from '@/contexts/LanguageContext';
+import BrutalButton from '@/components/ui/ds/Button';
+import BrutalCard from '@/components/ui/ds/Card';
+import BrutalBadge from '@/components/ui/ds/Badge';
+import BrutalIcon from '@/components/ui/ds/BrutalIcon';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isTablet = SCREEN_WIDTH >= 768;
 const isWeb = Platform.OS === 'web';
 
-// Helper function to get image URLs from public folder
-const getImageUrl = (path: string) => {
-  return getVideoUrl(path); // Reuse same Metro URL logic
-};
+const getImageUrl = (path: string) => getVideoUrl(path);
+
+// ─── Fade-in slide-up animation hook ────────────────────────────────────────
+function useFadeIn(delay = 0) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(24)).current;
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(opacity, { toValue: 1, duration: 500, delay, useNativeDriver: true }),
+      Animated.timing(translateY, { toValue: 0, duration: 500, delay, useNativeDriver: true }),
+    ]).start();
+  }, []);
+  return { opacity, transform: [{ translateY }] };
+}
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { t, locale } = useLanguage();
+  const heroAnim = useFadeIn(60);
+  const feat1 = useFadeIn(160);
+  const feat2 = useFadeIn(220);
+  const feat3 = useFadeIn(280);
+
+  const features = [
+    {
+      icon: 'ai' as const,
+      title: t('home.feature1Title'),
+      desc: t('home.feature1Desc'),
+      anim: feat1,
+      badgeColor: NB.color.primaryLight,
+    },
+    {
+      icon: 'lesson' as const,
+      title: t('home.feature2Title'),
+      desc: t('home.feature2Desc'),
+      anim: feat2,
+      badgeColor: NB.color.secondaryLight,
+    },
+    {
+      icon: 'flashcard' as const,
+      title: t('home.feature3Title'),
+      desc: t('home.feature3Desc'),
+      anim: feat3,
+      badgeColor: NB.color.accentLight,
+    },
+  ];
+
+  const teamMembers = [
+    { name: 'Quang Phát', role: 'AI Application & Platform Developer', image: '/Phat.jpg', keyword: 'Cloud & System' },
+    { name: 'Quốc Khánh', role: 'Lead AI Engineer & Developer', image: '/Khanh.jpg', keyword: 'Computer Vision' },
+    { name: 'Thảo Nguyên', role: 'AI UX & Product Design Researcher', image: '/Nguyen.jpg', keyword: 'Interaction Design' },
+    { name: 'Hồng Anh', role: 'AI Computer Vision Scientist', image: '/HAnh.jpg', keyword: 'Deep Learning' },
+    { name: 'Anh Việt', role: 'AI Curriculum & Content Director', image: '/Viet.jpg', keyword: 'Sign Language AI' },
+  ];
+
+  const testimonials = [
+    {
+      name: 'Anh Việt',
+      role: 'Student & AI Beta Tester',
+      image: '/Viet.jpg',
+      quote: 'HearMe\'s AI-driven feedback is incredible. The real-time camera tracking accurately analyzes my gestures and immediately tells me how to improve.',
+    },
+    {
+      name: 'Quốc Khánh',
+      role: 'Special Education Teacher',
+      image: '/Khanh.jpg',
+      quote: 'Integrating interactive AI into my sign language class has been a game-changer. The computer vision model acts like a dedicated assistant for each student.',
+    },
+    {
+      name: 'Thảo Nguyên',
+      role: 'Healthcare Professional',
+      image: '/Nguyen.jpg',
+      quote: 'Analyzing sign language through machine learning opened a new horizon for accessible healthcare. HearMe is a remarkable blend of tech and social impact.',
+    },
+  ];
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Hero Section */}
-      <View style={styles.heroSection}>
-        <View style={styles.heroContent}>
-          <Text style={styles.heroTitle}>
-            Connecting People Through{' '}
-            <Text style={styles.heroHighlight}>Sign Language</Text>
-          </Text>
-          <Text style={styles.heroSubtitle}>
-            <Text style={styles.brandHighlight}>HearMe</Text> is dedicated to breaking down communication barriers by making sign language learning accessible, engaging, and effective for everyone.
-          </Text>
-          <View style={styles.heroButtons}>
-            <TouchableOpacity 
-              style={styles.primaryButton}
-              onPress={() => router.push('/lessons')}
-            >
-              <Text style={styles.primaryButtonText}>Explore Our Courses</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
+      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
 
-      {/* Mission & Vision */}
-      <View style={styles.section}>
-        <View style={styles.cardRow}>
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <View style={styles.iconCircle}>
-                <Text style={styles.icon}>🎯</Text>
+        {/* ── HERO ─────────────────────────────────────────────────────── */}
+        <View style={styles.heroSection}>
+          <Animated.View style={[styles.heroInner, heroAnim]}>
+            <View style={styles.heroLeft}>
+              <View style={styles.heroBadgeWrapper}>
+                <BrutalBadge label={t('home.heroPill')} variant="primary" />
               </View>
-              <Text style={styles.cardTitle}>Our Mission</Text>
-            </View>
-            <Text style={styles.cardText}>
-              Our mission is to empower individuals to learn sign language through an accessible, interactive, and effective online platform.
-            </Text>
-          </View>
-
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <View style={styles.iconCircle}>
-                <Text style={styles.icon}>💡</Text>
-              </View>
-              <Text style={styles.cardTitle}>Our Vision</Text>
-            </View>
-            <Text style={styles.cardText}>
-              We envision a world where sign language is widely recognized, respected, and learned, breaking down barriers between deaf and hearing communities.
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Core Values */}
-      {/* <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Our Core Values</Text>
-        <View style={styles.valuesGrid}>
-          {[
-            { icon: '❤️', title: 'Inclusion', desc: 'Everyone deserves access to communication.' },
-            { icon: '🎯', title: 'Innovation', desc: 'Cutting-edge technology for effective learning.' },
-            { icon: '📚', title: 'Education', desc: 'High-quality content for all levels.' },
-            { icon: '🌐', title: 'Accessibility', desc: 'Features for diverse learning needs.' },
-            { icon: '👥', title: 'Community', desc: 'Supportive learning environment.' },
-            { icon: '⭐', title: 'Excellence', desc: 'Highest standards in everything we do.' },
-          ].map((value, index) => (
-            <View key={index} style={styles.valueCard}>
-              <Text style={styles.valueIcon}>{value.icon}</Text>
-              <Text style={styles.valueTitle}>{value.title}</Text>
-              <Text style={styles.valueDesc}>{value.desc}</Text>
-            </View>
-          ))}
-        </View>
-      </View> */}
-
-      {/* Our Story Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Our Story</Text>
-        <View style={styles.storyContainer}>
-          <View style={styles.storyContent}>
-            <Text style={styles.storyText}>
-              HearMe was born from a personal experience. Our founders, Quốc Khánh and Thảo Nguyên, witnessed firsthand the communication barriers faced by their deaf cousin in everyday situations. This inspired them to create a solution that would make sign language learning accessible to everyone.
-            </Text>
-            <Text style={styles.storyText}>
-              In 2025, with a small team of passionate educators and developers, HearMe was launched with a simple goal: to create an engaging, effective, and accessible platform for learning sign language.
-            </Text>
-            <Text style={styles.storyText}>
-              What started as a collection of basic ASL lessons has grown into a comprehensive platform offering multiple sign languages, interactive practice tools, a supportive community, and partnerships with organizations worldwide.
-            </Text>
-            <Text style={styles.storyText}>
-              Today, HearMe serves learners across the globe, from families wanting to communicate with deaf loved ones to professionals seeking to make their services more inclusive. Our journey continues as we expand our offerings and improve our technology to better serve our mission.
-            </Text>
-          </View>
-          <Image 
-            source={{ uri: getImageUrl('/Team.jpg') }}
-            style={styles.storyImage}
-            resizeMode="cover"
-          />
-        </View>
-      </View>
-
-      {/* Team Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Meet Our Team</Text>
-        <Text style={styles.sectionSubtitle}>
-          Our passionate team of experts dedicated to making sign language learning accessible to everyone.
-        </Text>
-        <View style={styles.teamGrid}>
-          {[
-            { 
-              name: 'Quốc Khánh', 
-              role: 'Development Team Lead & AI Specialist', 
-              image: '/Khanh.jpg', 
-              desc: 'Quốc Khánh leads our technical development, specializing in designing and training advanced deep learning models (CNNs & Transformers) for high-accuracy, real-time sign language recognition.' 
-            },
-            { 
-              name: 'Thảo Nguyên', 
-              role: 'AI Product & UX Designer', 
-              image: '/Nguyen.jpg', 
-              desc: 'Thảo Nguyên researches and designs intuitive AI-human interaction interfaces, optimizing user accessibility and creating seamless user flows for real-time sign language translation.' 
-            },
-            { 
-              name: 'Hồng Anh', 
-              role: 'AI Research Engineer', 
-              image: '/HAnh.jpg', 
-              desc: 'Hồng Anh focuses on computer vision optimization, researching and tuning lightweight MediaPipe models to deliver seamless, low-latency landmark tracking.' 
-            },
-            { 
-              name: 'Tấn Phát', 
-              role: 'AI Full-Stack Developer', 
-              image: '/Phat.jpg', 
-              desc: 'Tấn Phát designs the system architecture, integrating complex machine learning pipelines into the frontend UI for a fast, responsive user experience.' 
-            },
-            { 
-              name: 'Anh Việt', 
-              role: 'Content Director & AI Curriculum Designer', 
-              image: '/Viet.jpg', 
-              desc: 'Anh Việt designs our curriculum, utilizing Natural Language Processing (NLP) and generative AI to create adaptive, highly personalized learning pathways.' 
-            },
-          ].map((member, index) => (
-            <View key={index} style={styles.teamCard}>
-              <Image 
-                source={{ uri: getImageUrl(member.image) }}
-                style={styles.teamImage}
-                resizeMode="cover"
-              />
-              <View style={styles.teamInfo}>
-                <Text style={styles.teamName}>{member.name}</Text>
-                <Text style={styles.teamRole}>{member.role}</Text>
-                <Text style={styles.teamDesc}>{member.desc}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-      </View>
-
-      {/* Achievements */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Our Achievements</Text>
-        <View style={styles.achievementContainer}>
-          <View style={styles.achievementTextSection}>
-            <View style={styles.achievementCard}>
-              <Text style={styles.achievementTitle}>AI For Life 2024 Finalist</Text>
-              <Text style={styles.achievementText}>
-                Our team HearMe proudly made it to the finals of "Trí Tuệ Nhân Tạo & Ứng Dụng - DaNang AI For Life 2024" 
-                competition, showcasing our innovative approach to making sign language learning accessible through technology.
+              <Text style={styles.heroTitle}>
+                {t('home.heroTitle')}
+                <Text style={styles.heroHighlight}>{t('home.heroHighlight')}</Text>
               </Text>
-              <View style={styles.badgeContainer}>
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>AI Technology</Text>
-                </View>
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>Innovation</Text>
-                </View>
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>Social Impact</Text>
-                </View>
-              </View>
-            </View>
-            
-            <View style={styles.achievementCard}>
-              <Text style={styles.achievementTitle}>Recognized by VKU & KOICA</Text>
-              <Text style={styles.achievementText}>
-                Our project received recognition from Vietnam-Korea University of Information and Communication Technology (VKU) 
-                and Korea International Cooperation Agency (KOICA), validating our mission to bridge communication gaps through technology.
+              <Text style={styles.heroSubtitle}>
+                <Text style={styles.heroBrand}>HearMe</Text> {t('home.heroSubtitle')}
               </Text>
-              <View style={styles.badgeContainer}>
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>International Recognition</Text>
-                </View>
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>Educational Technology</Text>
-                </View>
+              <View style={styles.heroCTAs}>
+                <BrutalButton
+                  label={t('home.startLearning')}
+                  variant="primary"
+                  size="lg"
+                  onPress={() => router.push('/lessons')}
+                  style={{ marginRight: 12 }}
+                />
+                <BrutalButton
+                  label={t('home.signLibrary')}
+                  variant="ghost"
+                  size="lg"
+                  onPress={() => router.push('/(tabs)/library')}
+                />
+              </View>
+              <View style={styles.heroStats}>
+                {[
+                  { n: '500+', label: t('home.vocabCount') },
+                  { n: 'AI Real-time', label: t('home.realtimeFeedback') },
+                  { n: t('home.infinitePractice'), label: '' }, // we can keep infinite label as n itself
+                ].map((s, idx) => (
+                  <View key={idx} style={[
+                    styles.statItem,
+                    { backgroundColor: idx % 3 === 0 ? NB.color.secondaryLight : idx % 3 === 1 ? NB.color.primaryLight : NB.color.accentLight }
+                  ]}>
+                    <Text style={styles.statNum}>{s.n}</Text>
+                    {s.label ? <Text style={styles.statLabel}>{s.label}</Text> : null}
+                  </View>
+                ))}
               </View>
             </View>
-          </View>
-          
-          <Image 
-            source={{ uri: getImageUrl('/Certificate.jpg') }}
-            style={styles.certificateImage}
-            resizeMode="cover"
-          />
+            {isTablet && (
+              <View style={styles.heroRight}>
+                <BrutalCard padded={false} style={styles.heroDemoCard}>
+                  <View style={styles.heroDemoHeader}>
+                    <View style={styles.heroDots}>
+                      <View style={[styles.heroDemoDot, { backgroundColor: NB.color.danger }]} />
+                      <View style={[styles.heroDemoDot, { backgroundColor: NB.color.secondary }]} />
+                      <View style={[styles.heroDemoDot, { backgroundColor: NB.color.accent }]} />
+                    </View>
+                    <Text style={styles.heroDemoTitle}>{t('home.practiceStudio')}</Text>
+                  </View>
+                  <View style={styles.heroDemoCam}>
+                    <View style={styles.handSymbolWrap}>
+                      <BrutalIcon name="hand" size={48} color={NB.color.primary} />
+                    </View>
+                    <Text style={styles.heroDemoCamText}>{t('home.cameraActive')}</Text>
+                    <View style={styles.heroDemoAccuracy}>
+                      <Text style={styles.heroDemoAccuracyLabel}>{t('home.accuracy')}</Text>
+                      <Text style={styles.heroDemoAccuracyVal}>94%</Text>
+                    </View>
+                  </View>
+                  <View style={styles.heroDemoFeedback}>
+                    <BrutalIcon name="correct" size={20} color={NB.color.accent} />
+                    <Text style={styles.heroDemoFeedbackText}>{t('home.feedbackCorrect')}</Text>
+                  </View>
+                </BrutalCard>
+              </View>
+            )}
+          </Animated.View>
         </View>
-      </View>
 
-      {/* Testimonials */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>What Our Users Say</Text>
-        <View style={styles.testimonialsGrid}>
-          {[
-            { 
-              name: 'Anh Việt', 
-              role: 'Student & AI Beta Tester', 
-              image: '/Viet.jpg',
-              quote: 'HearMe\'s AI-driven feedback is incredible. The real-time camera tracking accurately analyzes my hand gestures and immediately points out how I can improve my sign language posture.'
-            },
-            { 
-              name: 'Quốc Khánh', 
-              role: 'Special Education Teacher & AI Collaborator', 
-              image: '/Khanh.jpg',
-              quote: 'Integrating interactive AI into my sign language class has been a game-changer. The computer vision model acts like a dedicated assistant, helping each of my students practice individually.'
-            },
-            { 
-              name: 'Thảo Nguyên', 
-              role: 'Healthcare Professional & AI Researcher', 
-              image: '/Nguyen.jpg',
-              quote: 'Analyzing sign language gestures through machine learning models opened a new horizon for accessible healthcare communication. HearMe is a remarkable blend of technology and social impact.'
-            },
-          ].map((testimonial, index) => (
-            <View key={index} style={styles.testimonialCard}>
-              <View style={styles.testimonialHeader}>
-                <Image 
-                  source={{ uri: getImageUrl(testimonial.image) }}
-                  style={styles.testimonialAvatar}
+        {/* ── FEATURES ─────────────────────────────────────────────────── */}
+        <View style={styles.section}>
+          <View style={styles.sectionLabelWrap}>
+            <BrutalBadge label={t('home.featuresLabel')} variant="secondary" />
+          </View>
+          <Text style={styles.sectionTitle}>{t('home.featuresTitle')}</Text>
+          <View style={[styles.featureGrid, isTablet && styles.featureGridRow]}>
+            {features.map((f, i) => (
+              <Animated.View key={i} style={[styles.featureCardWrap, f.anim]}>
+                <BrutalCard hoverable style={styles.featureCard}>
+                  <View style={[styles.featureIconWrap, { backgroundColor: f.badgeColor }]}>
+                    <BrutalIcon name={f.icon} size={28} color={NB.color.text} />
+                  </View>
+                  <Text style={styles.featureTitle}>{f.title}</Text>
+                  <Text style={styles.featureDesc}>{f.desc}</Text>
+                </BrutalCard>
+              </Animated.View>
+            ))}
+          </View>
+        </View>
+
+        {/* ── OUR STORY ────────────────────────────────────────────────── */}
+        <View style={[styles.section, styles.storySection]}>
+          <View style={[styles.storyRow, isTablet && styles.storyRowTablet]}>
+            <View style={styles.storyTextCol}>
+              <View style={styles.sectionLabelWrap}>
+                <BrutalBadge label={t('home.storyLabel')} variant="secondary" />
+              </View>
+              <Text style={styles.sectionTitle}>{t('home.storyTitle')}</Text>
+              <Text style={styles.storyText}>{t('home.storyText1')}</Text>
+              <Text style={styles.storyText}>{t('home.storyText2')}</Text>
+              <View style={styles.storyBadgeRow}>
+                <BrutalBadge label="🏆 AI For Life 2024 Finalist" variant="primary" style={{ marginRight: 6, marginBottom: 6 }} />
+                <BrutalBadge label="🎓 VKU × KOICA Recognized" variant="accent" style={{ marginRight: 6, marginBottom: 6 }} />
+              </View>
+            </View>
+            <View style={styles.storyImgCol}>
+              <View style={styles.storyImageBorder}>
+                <Image
+                  source={{ uri: getImageUrl('/Team.jpg') }}
+                  style={styles.storyImage}
                   resizeMode="cover"
                 />
-                <View style={styles.testimonialInfo}>
-                  <Text style={styles.testimonialName}>{testimonial.name}</Text>
-                  <Text style={styles.testimonialRole}>{testimonial.role}</Text>
-                </View>
               </View>
-              <Text style={styles.testimonialQuote}>"{testimonial.quote}"</Text>
             </View>
-          ))}
+          </View>
         </View>
-      </View>
 
-      {/* CTA Section */}
-      <View style={styles.ctaSection}>
-        <Text style={styles.ctaTitle}>Join Our Mission</Text>
-        <Text style={styles.ctaText}>
-          Be part of our journey to make sign language learning accessible to everyone. Start your learning journey today!
-        </Text>
-        <TouchableOpacity 
-          style={styles.ctaButton}
-          onPress={() => router.push('/lessons')}
-        >
-          <Text style={styles.ctaButtonText}>Start Learning →</Text>
-        </TouchableOpacity>
-      </View>
+        {/* ── TEAM ─────────────────────────────────────────────────────── */}
+        <View style={styles.section}>
+          <View style={styles.sectionLabelWrap}>
+            <BrutalBadge label={t('home.teamLabel')} variant="secondary" />
+          </View>
+          <Text style={styles.sectionTitle}>{t('home.teamTitle')}</Text>
+          <Text style={styles.sectionSubtitle}>{t('home.teamSubtitle')}</Text>
 
-      {/* Footer */}
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>HearMe Learning v1.0</Text>
-        <Text style={styles.footerSubtext}>Making sign language accessible to everyone</Text>
-      </View>
-    </ScrollView>
+          {isTablet ? (
+            <View style={styles.teamGridTablet}>
+              <View style={styles.teamRowTablet}>
+                {teamMembers.slice(0, 3).map((m) => (
+                  <BrutalCard key={m.name} style={styles.teamCardGrid} hoverable padded={false}>
+                    <View style={styles.teamAvatarWrap}>
+                      <Image
+                        source={{ uri: getImageUrl(m.image) }}
+                        style={styles.teamAvatar}
+                        resizeMode="cover"
+                      />
+                    </View>
+                    <View style={styles.teamInfo}>
+                      <Text style={styles.teamName}>{m.name}</Text>
+                      <Text style={styles.teamRole}>{m.role}</Text>
+                      <BrutalBadge label={m.keyword} variant="primary" style={styles.teamBadge} />
+                    </View>
+                  </BrutalCard>
+                ))}
+              </View>
+              <View style={styles.teamRowTablet}>
+                {teamMembers.slice(3).map((m) => (
+                  <BrutalCard key={m.name} style={styles.teamCardGrid} hoverable padded={false}>
+                    <View style={styles.teamAvatarWrap}>
+                      <Image
+                        source={{ uri: getImageUrl(m.image) }}
+                        style={styles.teamAvatar}
+                        resizeMode="cover"
+                      />
+                    </View>
+                    <View style={styles.teamInfo}>
+                      <Text style={styles.teamName}>{m.name}</Text>
+                      <Text style={styles.teamRole}>{m.role}</Text>
+                      <BrutalBadge label={m.keyword} variant="primary" style={styles.teamBadge} />
+                    </View>
+                  </BrutalCard>
+                ))}
+              </View>
+            </View>
+          ) : (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.teamList}
+            >
+              {teamMembers.map((m) => (
+                <BrutalCard key={m.name} style={styles.teamCard} hoverable padded={false}>
+                  <View style={styles.teamAvatarWrap}>
+                    <Image
+                      source={{ uri: getImageUrl(m.image) }}
+                      style={styles.teamAvatar}
+                      resizeMode="cover"
+                    />
+                  </View>
+                  <View style={styles.teamInfo}>
+                    <Text style={styles.teamName}>{m.name}</Text>
+                    <Text style={styles.teamRole}>{m.role}</Text>
+                    <BrutalBadge label={m.keyword} variant="primary" style={styles.teamBadge} />
+                  </View>
+                </BrutalCard>
+              ))}
+            </ScrollView>
+          )}
+        </View>
+
+        {/* ── ACHIEVEMENT ──────────────────────────────────────────────── */}
+        <View style={[styles.section, styles.achieveSection]}>
+          <View style={styles.sectionLabelWrap}>
+            <BrutalBadge label={t('home.achievementsLabel')} variant="secondary" />
+          </View>
+          <Text style={styles.sectionTitle}>{t('home.achievementsTitle')}</Text>
+
+          <View style={[styles.achieveRow, isTablet && styles.achieveRowTablet]}>
+            <View style={styles.achieveTextCol}>
+              <BrutalCard style={styles.achieveCard} color={NB.color.surface}>
+                <Text style={styles.achieveTitle}>{t('home.achievement1Title')}</Text>
+                <Text style={styles.achieveDesc}>{t('home.achievement1Desc')}</Text>
+              </BrutalCard>
+              <BrutalCard style={styles.achieveCard} color={NB.color.surface}>
+                <Text style={styles.achieveTitle}>{t('home.achievement2Title')}</Text>
+                <Text style={styles.achieveDesc}>{t('home.achievement2Desc')}</Text>
+              </BrutalCard>
+            </View>
+            <View style={styles.achieveImgCol}>
+              <View style={styles.achieveImageBorder}>
+                <Image
+                  source={{ uri: getImageUrl('/Certificate.jpg') }}
+                  style={styles.achieveImage}
+                  resizeMode="cover"
+                />
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* ── TESTIMONIALS ─────────────────────────────────────────────── */}
+        <View style={styles.section}>
+          <View style={styles.sectionLabelWrap}>
+            <BrutalBadge label={t('home.testimonialsLabel')} variant="secondary" />
+          </View>
+          <Text style={styles.sectionTitle}>{t('home.testimonialsTitle')}</Text>
+          <View style={[styles.testimonialRow, isTablet && styles.testimonialRowTablet]}>
+            {testimonials.map((t) => (
+              <BrutalCard key={t.name} style={styles.testimonialCard} hoverable>
+                <View style={styles.quoteIconWrap}>
+                  <Text style={styles.quoteIcon}>“</Text>
+                </View>
+                <Text style={styles.testimonialQuote}>{t.quote}</Text>
+                <View style={styles.testimonialAuthor}>
+                  <Image
+                    source={{ uri: getImageUrl(t.image) }}
+                    style={styles.testimonialAvatar}
+                    resizeMode="cover"
+                  />
+                  <View>
+                    <Text style={styles.testimonialName}>{t.name}</Text>
+                    <Text style={styles.testimonialRole}>{t.role}</Text>
+                  </View>
+                </View>
+              </BrutalCard>
+            ))}
+          </View>
+        </View>
+
+        {/* ── CTA ──────────────────────────────────────────────────────── */}
+        <View style={styles.ctaWrapper}>
+          <BrutalCard style={styles.ctaSection} color={NB.color.secondary}>
+            <Text style={styles.ctaTitle}>{t('home.ctaTitle')}</Text>
+            <Text style={styles.ctaDesc}>{t('home.ctaDescription')}</Text>
+            <BrutalButton
+              label={t('home.ctaButton')}
+              variant="primary"
+              size="lg"
+              onPress={() => router.push('/lessons')}
+            />
+          </BrutalCard>
+        </View>
+
+        {/* ── FOOTER ───────────────────────────────────────────────────── */}
+        <View style={styles.footer}>
+          <Text style={styles.footerLogo}>🤟 HearMe</Text>
+          <Text style={styles.footerMembers}>
+            {locale === 'ja' ? 'チームメンバー：' : 'Đội ngũ phát triển: '}Quang Phát, Quốc Khánh, Thảo Nguyên, Hồng Anh, Anh Việt
+          </Text>
+          <Text style={styles.footerComp}>
+            {locale === 'ja' ? 'ダナン AI For Life 2024 ファイナリスト' : 'Dự án tham dự cuộc thi DaNang AI For Life 2024'}
+          </Text>
+          <Text style={styles.footerCopyright}>
+            © 2026 HearMe. All rights reserved.
+          </Text>
+        </View>
+
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-  },
+  safeArea: { flex: 1, backgroundColor: NB.color.bg },
+  scroll: { flex: 1, backgroundColor: NB.color.bg },
+
+  // ── Hero ──
   heroSection: {
-    backgroundColor: '#EEF2FF',
-    paddingVertical: isTablet ? 80 : 40,
+    backgroundColor: NB.color.bg,
+    paddingVertical: isTablet ? 80 : 48,
     paddingHorizontal: isTablet ? 60 : 20,
-    marginBottom: 40,
+    borderBottomWidth: NB.border.regular,
+    borderBottomColor: NB.color.border,
   },
-  heroContent: {
-    alignItems: 'center',
+  heroInner: {
+    flexDirection: isTablet ? 'row' : 'column',
+    alignItems: isTablet ? 'center' : 'flex-start',
+    gap: 40,
+    maxWidth: 1200,
+    alignSelf: 'center',
+    width: '100%',
+  },
+  heroLeft: { flex: 1.2 },
+  heroBadgeWrapper: {
+    marginBottom: 20,
+    alignSelf: 'flex-start',
   },
   heroTitle: {
-    fontSize: isTablet ? 36 : 28,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    textAlign: 'center',
-    marginBottom: 16,
+    fontSize: isTablet ? 54 : 36,
+    fontWeight: '900',
+    color: NB.color.text,
+    lineHeight: isTablet ? 64 : 44,
+    marginBottom: 20,
+    letterSpacing: -1,
   },
   heroHighlight: {
-    color: '#6366f1',
+    color: NB.color.primary,
+    textDecorationLine: 'underline',
   },
   heroSubtitle: {
-    fontSize: isTablet ? 18 : 16,
-    color: '#6b7280',
-    textAlign: 'center',
-    marginBottom: 32,
-    lineHeight: 24,
-  },
-  brandHighlight: {
-    fontSize: isTablet ? 24 : 20,
-    fontWeight: 'bold',
-    color: '#6366f1',
-    textShadowColor: 'rgba(99, 102, 241, 0.2)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  heroButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  primaryButton: {
-    backgroundColor: '#6366f1',
-    paddingVertical: 14,
-    paddingHorizontal: 28,
-    borderRadius: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  primaryButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
+    fontSize: isTablet ? 18 : 15,
+    color: NB.color.text,
+    lineHeight: 28,
     fontWeight: '600',
+    marginBottom: 32,
   },
+  heroBrand: { fontWeight: '900', color: NB.color.primary },
+  heroCTAs: { flexDirection: 'row', gap: 12, flexWrap: 'wrap', marginBottom: 36 },
+  heroStats: { flexDirection: 'row', gap: 16, flexWrap: 'wrap', marginTop: 8 },
+  statItem: {
+    flex: 1,
+    minWidth: 140,
+    maxWidth: isTablet ? 220 : '100%',
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    borderWidth: NB.border.thick,
+    borderColor: NB.color.border,
+    borderRadius: NB.radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...(Platform.OS === 'web' ? { boxShadow: '4px 4px 0px #111111' } : {}),
+  },
+  statNum: { fontSize: 26, fontWeight: '900', color: NB.color.text, letterSpacing: -0.5 },
+  statLabel: { fontSize: 13, color: NB.color.text, fontWeight: '800', marginTop: 6, textAlign: 'center' },
+
+  // Hero right mockup
+  heroRight: { flex: 0.8, maxWidth: 360, alignSelf: 'stretch', justifyContent: 'center' },
+  heroDemoCard: {
+    backgroundColor: NB.color.surface,
+    overflow: 'hidden',
+  },
+  heroDemoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: NB.color.border,
+    borderBottomWidth: NB.border.regular,
+    borderBottomColor: NB.color.border,
+  },
+  heroDots: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  heroDemoDot: { width: 12, height: 12, borderRadius: 6, borderWidth: 1.5, borderColor: NB.color.border },
+  heroDemoTitle: { color: NB.color.bg, fontSize: 13, fontWeight: '900', marginLeft: 12, textTransform: 'uppercase', letterSpacing: 0.5 },
+  heroDemoCam: {
+    backgroundColor: NB.color.primaryLight,
+    height: 180,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    margin: 16,
+    borderRadius: NB.radius.md,
+    borderWidth: NB.border.regular,
+    borderColor: NB.color.border,
+  },
+  handSymbolWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: NB.color.surface,
+    borderWidth: NB.border.regular,
+    borderColor: NB.color.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...(Platform.OS === 'web' ? { boxShadow: '2px 2px 0px #111111' } : {}),
+  },
+  heroDemoCamText: { color: NB.color.text, fontSize: 14, fontWeight: '700' },
+  heroDemoAccuracy: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
+  heroDemoAccuracyLabel: { color: NB.color.text, fontSize: 13, fontWeight: '600' },
+  heroDemoAccuracyVal: { color: NB.color.primary, fontWeight: '900', fontSize: 20 },
+  heroDemoFeedback: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 14,
+    backgroundColor: NB.color.accentLight,
+    margin: 16,
+    marginTop: 0,
+    borderRadius: NB.radius.md,
+    borderWidth: NB.border.regular,
+    borderColor: NB.color.border,
+  },
+  heroDemoFeedbackText: { color: NB.color.text, fontWeight: '800', fontSize: 13 },
+
+  // ── Common section ──
   section: {
     paddingHorizontal: isTablet ? 60 : 20,
-    marginBottom: 40,
+    paddingVertical: NB.space.section,
+    maxWidth: 1200,
+    alignSelf: 'center',
+    width: '100%',
+  },
+  sectionLabelWrap: {
+    marginBottom: 16,
   },
   sectionTitle: {
-    fontSize: isTablet ? 32 : 24,
-    fontWeight: 'bold',
-    color: '#6366f1',
-    marginBottom: 16,
+    fontSize: isTablet ? 36 : 28,
+    fontWeight: '900',
+    color: NB.color.text,
+    marginBottom: 12,
+    letterSpacing: -0.5,
   },
   sectionSubtitle: {
     fontSize: 16,
-    color: '#6b7280',
-    marginBottom: 24,
+    color: NB.color.text,
+    fontWeight: '600',
+    lineHeight: 24,
+    marginBottom: 32,
   },
-  cardRow: {
-    flexDirection: isTablet ? 'row' : 'column',
-    gap: 16,
-  },
-  card: {
+
+  // ── Features ──
+  featureGrid: { gap: 20 },
+  featureGridRow: { flexDirection: 'row' },
+  featureCardWrap: { flex: isTablet ? 1 : undefined },
+  featureCard: {
     flex: 1,
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: '#e0e7ff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    height: '100%',
+    gap: 12,
   },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  iconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#e0e7ff',
+  featureIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: NB.radius.md,
+    borderWidth: NB.border.regular,
+    borderColor: NB.color.border,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginBottom: 8,
+    ...(Platform.OS === 'web' ? { boxShadow: '2px 2px 0px #111111' } : {}),
   },
-  icon: {
-    fontSize: 24,
+  featureTitle: { fontSize: 18, fontWeight: '900', color: NB.color.text },
+  featureDesc: { fontSize: 14, color: NB.color.text, fontWeight: '600', lineHeight: 22 },
+
+  // ── Story ──
+  storySection: {
+    backgroundColor: NB.color.primaryLight,
+    borderTopWidth: NB.border.regular,
+    borderTopColor: NB.color.border,
+    borderBottomWidth: NB.border.regular,
+    borderBottomColor: NB.color.border,
+    maxWidth: '100%',
+    width: '100%',
   },
-  cardTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1f2937',
-  },
-  cardText: {
-    fontSize: 15,
-    color: '#6b7280',
-    lineHeight: 22,
-  },
-  valuesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: isTablet ? 12 : 8,
-  },
-  valueCard: {
-    width: isTablet ? 'calc(33.33% - 8px)' : 'calc(50% - 6px)',
-    backgroundColor: '#ffffff',
-    borderRadius: isTablet ? 12 : 8,
-    padding: isTablet ? 16 : 12,
-    borderWidth: 1,
-    borderColor: '#e0e7ff',
-    minWidth: isTablet ? 200 : 140,
-  },
-  valueIcon: {
-    fontSize: isTablet ? 32 : 28,
-    marginBottom: isTablet ? 8 : 6,
-  },
-  valueTitle: {
-    fontSize: isTablet ? 16 : 14,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    marginBottom: isTablet ? 4 : 2,
-  },
-  valueDesc: {
-    fontSize: isTablet ? 13 : 12,
-    color: '#6b7280',
-    lineHeight: isTablet ? 18 : 16,
-  },
-  storyContainer: {
-    flexDirection: isTablet ? 'row' : 'column',
-    gap: 20,
-  },
-  storyContent: {
-    flex: 1,
-    gap: 16,
-  },
+  storyRow: { gap: 32, maxWidth: 1200, alignSelf: 'center', width: '100%' },
+  storyRowTablet: { flexDirection: 'row', alignItems: 'center' },
+  storyTextCol: { flex: 1.1, gap: 8 },
   storyText: {
     fontSize: 15,
-    color: '#6b7280',
-    lineHeight: 22,
+    color: NB.color.text,
+    lineHeight: 26,
+    fontWeight: '600',
+    marginBottom: 16,
     textAlign: 'justify',
   },
-  storyImage: {
-    width: isTablet ? '45%' : '100%',
-    height: isTablet ? 400 : 250,
-    borderRadius: 12,
-    backgroundColor: '#f3f4f6',
-  },
-  teamGrid: {
-    flexDirection: isTablet ? 'row' : 'column',
-    flexWrap: 'wrap',
-    gap: isTablet ? 24 : 16,
-    justifyContent: 'center',
-    alignItems: 'stretch',
-  },
-  teamCard: {
-    flex: isTablet ? 0.8 : 1,
-    maxWidth: isTablet ? 400 : '100%',
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
+  storyBadgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 8 },
+  storyImgCol: { flex: isTablet ? 0.9 : 1, alignItems: 'center' },
+  storyImageBorder: {
+    borderWidth: NB.border.thick,
+    borderColor: NB.color.border,
+    borderRadius: NB.radius.lg,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#e0e7ff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  teamImage: {
     width: '100%',
-    aspectRatio: 1,
-    backgroundColor: '#f3f4f6',
+    ...(Platform.OS === 'web' ? { boxShadow: '6px 6px 0px #111111' } : {}),
+  },
+  storyImage: {
+    width: '100%',
+    height: isTablet ? 340 : 240,
+    backgroundColor: NB.color.border,
+  },
+
+  // ── Team ──
+  teamList: { gap: 16, paddingBottom: 12 },
+  teamGridTablet: { gap: 20, alignItems: 'center', width: '100%', marginTop: 8 },
+  teamRowTablet: { flexDirection: 'row', justifyContent: 'center', gap: 20, width: '100%' },
+  teamListGrid: { flexWrap: 'wrap', flexDirection: 'row', justifyContent: 'center' },
+  teamCard: {
+    width: 200,
+    overflow: 'hidden',
+  },
+  teamCardGrid: { width: 210 },
+  teamAvatarWrap: {
+    borderBottomWidth: NB.border.regular,
+    borderColor: NB.color.border,
+    overflow: 'hidden',
+    backgroundColor: NB.color.accentLight,
+  },
+  teamAvatar: {
+    width: '100%',
+    height: 180,
   },
   teamInfo: {
-    padding: isTablet ? 20 : 16,
-  },
-  teamName: {
-    fontSize: isTablet ? 20 : 18,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    marginBottom: 6,
-  },
-  teamRole: {
-    fontSize: isTablet ? 15 : 14,
-    color: '#6366f1',
-    marginBottom: 12,
-    fontWeight: '500',
-  },
-  teamDesc: {
-    fontSize: 14,
-    color: '#6b7280',
-    lineHeight: 22,
-  },
-  achievementContainer: {
-    flexDirection: isTablet ? 'row' : 'column',
-    gap: 20,
-  },
-  achievementTextSection: {
-    flex: 1,
-    gap: 16,
-  },
-  achievementCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: '#e0e7ff',
-  },
-  certificateImage: {
-    width: isTablet ? '45%' : '100%',
-    aspectRatio: 1.5, // landscape ratio
-    borderRadius: 12,
-    backgroundColor: '#f3f4f6',
-  },
-  achievementTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    marginBottom: 12,
-  },
-  achievementText: {
-    fontSize: 15,
-    color: '#6b7280',
-    lineHeight: 22,
-    marginBottom: 16,
-  },
-  testimonialsGrid: {
-    flexDirection: isTablet ? 'row' : 'column',
-    gap: 16,
-  },
-  testimonialCard: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
     padding: 16,
-    borderWidth: 1,
-    borderColor: '#e0e7ff',
-  },
-  testimonialHeader: {
-    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    gap: 8,
   },
+  teamName: { fontSize: 16, fontWeight: '900', color: NB.color.text, textAlign: 'center' },
+  teamRole: { fontSize: 13, color: NB.color.primary, textAlign: 'center', fontWeight: '800' },
+  teamBadge: { marginTop: 4 },
+
+  // ── Achievement ──
+  achieveSection: {
+    backgroundColor: NB.color.accentLight,
+    borderTopWidth: NB.border.regular,
+    borderTopColor: NB.color.border,
+    borderBottomWidth: NB.border.regular,
+    borderBottomColor: NB.color.border,
+    maxWidth: '100%',
+    width: '100%',
+  },
+  achieveRow: { gap: 32, maxWidth: 1200, alignSelf: 'center', width: '100%' },
+  achieveRowTablet: { flexDirection: 'row', alignItems: 'center' },
+  achieveTextCol: { flex: 1.1, gap: 16 },
+  achieveCard: {
+    marginBottom: 8,
+    gap: 8,
+  },
+  achieveTitle: { fontSize: 18, fontWeight: '900', color: NB.color.text },
+  achieveDesc: { fontSize: 14, color: NB.color.text, fontWeight: '600', lineHeight: 22 },
+  achieveImgCol: { flex: isTablet ? 0.9 : 1 },
+  achieveImageBorder: {
+    borderWidth: NB.border.thick,
+    borderColor: NB.color.border,
+    borderRadius: NB.radius.lg,
+    overflow: 'hidden',
+    width: '100%',
+    ...(Platform.OS === 'web' ? { boxShadow: '6px 6px 0px #111111' } : {}),
+  },
+  achieveImage: {
+    width: '100%',
+    aspectRatio: 1.4,
+    backgroundColor: NB.color.border,
+  },
+
+  // ── Testimonials ──
+  testimonialRow: { gap: 20 },
+  testimonialRowTablet: { flexDirection: 'row' },
+  testimonialCard: {
+    flex: isTablet ? 1 : undefined,
+    gap: 16,
+    position: 'relative',
+  },
+  quoteIconWrap: {
+    position: 'absolute',
+    top: 10,
+    right: 20,
+    opacity: 0.1,
+  },
+  quoteIcon: {
+    fontSize: 72,
+    fontWeight: '900',
+    color: NB.color.text,
+  },
+  testimonialQuote: {
+    fontSize: 14,
+    color: NB.color.text,
+    lineHeight: 24,
+    fontWeight: '600',
+    fontStyle: 'italic',
+  },
+  testimonialAuthor: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   testimonialAvatar: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#f3f4f6',
-    marginRight: 12,
+    borderWidth: NB.border.regular,
+    borderColor: NB.color.border,
+    backgroundColor: NB.color.border,
   },
-  testimonialInfo: {
-    flex: 1,
-  },
-  testimonialName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1f2937',
-  },
-  testimonialRole: {
-    fontSize: 13,
-    color: '#6b7280',
-  },
-  testimonialQuote: {
-    fontSize: 14,
-    color: '#6b7280',
-    lineHeight: 20,
-    fontStyle: 'italic',
-  },
-  badgeContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  badge: {
-    backgroundColor: '#e0e7ff',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-  },
-  badgeText: {
-    fontSize: 12,
-    color: '#4338ca',
-    fontWeight: '500',
+  testimonialName: { fontSize: 15, fontWeight: '900', color: NB.color.text },
+  testimonialRole: { fontSize: 13, color: NB.color.primary, fontWeight: '700' },
+
+  // ── CTA section ──
+  ctaWrapper: {
+    paddingHorizontal: isTablet ? 60 : 20,
+    paddingVertical: NB.space.section,
+    maxWidth: 1200,
+    alignSelf: 'center',
+    width: '100%',
   },
   ctaSection: {
-    backgroundColor: '#EEF2FF',
-    borderRadius: 16,
-    padding: isTablet ? 40 : 24,
-    marginHorizontal: isTablet ? 60 : 20,
-    marginBottom: 40,
+    padding: isTablet ? 56 : 32,
     alignItems: 'center',
+    gap: 20,
   },
   ctaTitle: {
-    fontSize: isTablet ? 28 : 22,
-    fontWeight: 'bold',
-    color: '#4338ca',
-    marginBottom: 12,
+    fontSize: isTablet ? 36 : 28,
+    fontWeight: '900',
+    color: NB.color.text,
     textAlign: 'center',
   },
-  ctaText: {
+  ctaDesc: {
     fontSize: 16,
-    color: '#6366f1',
+    color: NB.color.text,
+    fontWeight: '700',
     textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 22,
+    lineHeight: 24,
+    maxWidth: 480,
   },
-  ctaButton: {
-    backgroundColor: '#6366f1',
-    paddingVertical: 14,
-    paddingHorizontal: 32,
-    borderRadius: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  ctaButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+
+  // ── Footer ──
   footer: {
-    paddingVertical: 32,
+    paddingVertical: 40,
     alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
+    borderTopWidth: NB.border.regular,
+    borderTopColor: NB.color.border,
+    backgroundColor: NB.color.surface,
+    gap: 8,
+    paddingHorizontal: 20,
   },
-  footerText: {
-    fontSize: 14,
-    color: '#9ca3af',
-    marginBottom: 4,
-  },
-  footerSubtext: {
-    fontSize: 12,
-    color: '#d1d5db',
-  },
+  footerLogo: { fontSize: 22, fontWeight: '900', color: NB.color.primary, marginBottom: 4 },
+  footerMembers: { fontSize: 14, color: NB.color.text, fontWeight: '800', textAlign: 'center' },
+  footerComp: { fontSize: 13, color: NB.color.muted, fontWeight: '700', textAlign: 'center' },
+  footerCopyright: { fontSize: 12, color: NB.color.muted, fontWeight: '600', marginTop: 8, textAlign: 'center' },
 });

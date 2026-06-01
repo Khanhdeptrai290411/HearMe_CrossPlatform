@@ -1,11 +1,20 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  View, Text, StyleSheet, TouchableOpacity,
+  ActivityIndicator, Platform, ScrollView,
+} from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { VideoView, useVideoPlayer } from 'expo-video';
 
-import { API_CONFIG, getDictionaryDetailUrl, getVideoUrl } from '@/constants/config';
+import { getDictionaryDetailUrl, getVideoUrl } from '@/constants/config';
+import { NB } from '@/constants/theme';
+import BrutalBadge from '@/components/ui/ds/Badge';
+import BrutalButton from '@/components/ui/ds/Button';
+import BrutalCard from '@/components/ui/ds/Card';
+import BrutalIcon from '@/components/ui/ds/BrutalIcon';
 
 type WordDetail = {
   word: string;
@@ -15,12 +24,12 @@ type WordDetail = {
   video_url?: string;
 };
 
-// Use Metro bundler like Lessons: videos are served at /Family_video2 and /Color_video2
 const getMetroVideoUrl = (subPath: string) => getVideoUrl(`/${subPath}`);
 
 export default function LibraryDetailScreen() {
   const { word } = useLocalSearchParams<{ word: string }>();
   const router = useRouter();
+  const { t, locale } = useLanguage();
 
   const [data, setData] = useState<WordDetail | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -38,14 +47,9 @@ export default function LibraryDetailScreen() {
         const filename = String(json.video_url);
         const family = getMetroVideoUrl(`Family_video2/${filename}`);
         const color = getMetroVideoUrl(`Color_video2/${filename}`);
-        // Prefer Family; verify availability, then fallback to Color
         try {
           const head = await fetch(family, { method: 'HEAD' });
-          if (head.ok) {
-            setVideoUri(family);
-          } else {
-            setVideoUri(color);
-          }
+          setVideoUri(head.ok ? family : color);
         } catch {
           setVideoUri(color);
         }
@@ -60,9 +64,7 @@ export default function LibraryDetailScreen() {
     }
   }, [word]);
 
-  useEffect(() => {
-    fetchDetail();
-  }, [fetchDetail]);
+  useEffect(() => { fetchDetail(); }, [fetchDetail]);
 
   const player = useVideoPlayer(videoUri ?? '', (p: any) => {
     p.loop = true;
@@ -70,105 +72,213 @@ export default function LibraryDetailScreen() {
     if (videoUri) p.play();
   });
 
-  const onVideoError = () => {};
-
-  if (isLoading || !data) {
+  if (isLoading) {
     return (
       <SafeAreaView style={[styles.safeArea, styles.center]} edges={['top', 'left', 'right']}>
-        <ActivityIndicator size="large" color="#6366f1" />
-        <Text style={styles.centerText}>Đang tải...</Text>
+        <BrutalCard style={styles.loadingCard}>
+          <ActivityIndicator size="large" color={NB.color.primary} />
+          <Text style={styles.loadingText}>{t('library.loading')}</Text>
+        </BrutalCard>
+      </SafeAreaView>
+    );
+  }
+
+  if (!data) {
+    return (
+      <SafeAreaView style={[styles.safeArea, styles.center]} edges={['top', 'left', 'right']}>
+        <Text style={{ fontSize: 48, marginBottom: 12 }}>😕</Text>
+        <Text style={{ fontSize: 18, fontWeight: '900', color: NB.color.text, marginBottom: 16 }}>{t('library.emptyTitle')}</Text>
+        <BrutalButton label={`← ${t('common.back')}`} variant="ghost" onPress={() => router.back()} />
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-      <View style={styles.container}>
-        <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7}>
-          <Text style={styles.backText}>← Trở lại</Text>
-        </TouchableOpacity>
+      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
 
-        <Text style={styles.title}>{data.word}</Text>
-        {data.topic_name ? <Text style={styles.topic}>{data.topic_name}</Text> : null}
+        {/* Back button */}
+        <View style={styles.backPillWrap}>
+          <BrutalButton
+            label={`← ${t('library.title')}`}
+            variant="ghost"
+            size="sm"
+            onPress={() => router.back()}
+          />
+        </View>
 
-        <View style={styles.actionRow}>
-          <TouchableOpacity
-            style={styles.practiceButton}
-            activeOpacity={0.85}
+        {/* Word header */}
+        <View style={styles.wordHeader}>
+          <View style={styles.wordIconWrap}>
+            <BrutalIcon name="hand" size={32} color={NB.color.text} />
+          </View>
+          <View style={styles.wordHeaderText}>
+            <Text style={styles.wordTitle}>{data.word}</Text>
+            {data.topic_name ? <BrutalBadge label={data.topic_name} variant="primary" style={{ marginTop: 6 }} /> : null}
+          </View>
+        </View>
+
+        {/* Practice CTA */}
+        <View style={styles.ctaRow}>
+          <BrutalButton
+            label={t('library.learn')}
+            variant="primary"
+            size="lg"
             onPress={async () => {
               try {
                 await AsyncStorage.setItem('dictionarySearchWord', String(data.word ?? ''));
-                if (data?.video_url) {
-                  await AsyncStorage.setItem('dictionaryVideoFile', String(data.video_url));
-                }
+                if (data?.video_url) await AsyncStorage.setItem('dictionaryVideoFile', String(data.video_url));
               } catch {}
               router.push('/lessons' as any);
             }}
-          >
-            <Text style={styles.practiceText}>Học động tác này</Text>
-          </TouchableOpacity>
+          />
         </View>
 
-        <View style={styles.mediaCard}>
-          {videoUri ? (
-            <VideoView
-              player={player}
-              style={styles.video}
-              nativeControls
-              contentFit="contain"
-            />
-          ) : data.image_url ? (
-            <Image source={{ uri: data.image_url }} style={styles.image} resizeMode="contain" />
-          ) : null}
+        {/* Media card */}
+        <View style={styles.mediaCardWrapper}>
+          <BrutalCard padded={false} style={styles.mediaCard}>
+            {videoUri ? (
+              <VideoView
+                player={player}
+                style={styles.video}
+                nativeControls
+                contentFit="contain"
+              />
+            ) : data.image_url ? (
+              <View style={styles.imagePlaceholder}>
+                <BrutalIcon name="camera" size={48} color={NB.color.muted} />
+                <Text style={styles.noMediaText}>{locale === 'ja' ? '端末で画像を表示' : 'Xem hình ảnh trên thiết bị'}</Text>
+              </View>
+            ) : (
+              <View style={styles.noMedia}>
+                <BrutalIcon name="camera" size={48} color={NB.color.muted} />
+                <Text style={styles.noMediaText}>{locale === 'ja' ? 'ビデオはありません' : 'Chưa có video minh họa'}</Text>
+              </View>
+            )}
+          </BrutalCard>
         </View>
 
+        {/* Meaning card */}
         {data.meaning ? (
-          <View style={styles.meaningCard}>
-            <Text style={styles.meaningTitle}>Nghĩa</Text>
-            <Text style={styles.meaningText}>{data.meaning}</Text>
+          <View style={styles.cardPadding}>
+            <BrutalCard style={styles.meaningCard}>
+              <View style={styles.meaningHeader}>
+                <BrutalIcon name="spark" size={18} color={NB.color.primary} />
+                <Text style={styles.meaningHeaderTitle}>{t('library.meaningTitle')}</Text>
+              </View>
+              <Text style={styles.meaningText}>{data.meaning}</Text>
+            </BrutalCard>
           </View>
         ) : null}
-      </View>
+
+        {/* Tips card */}
+        <View style={styles.cardPadding}>
+          <BrutalCard style={styles.tipCard} color={NB.color.secondaryLight}>
+            <View style={styles.tipContent}>
+              <BrutalIcon name="brain" size={20} color={NB.color.text} />
+              <Text style={styles.tipText}>{t('library.tipDesc')}</Text>
+            </View>
+          </BrutalCard>
+        </View>
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#f4f5ff' },
-  container: { flex: 1, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#f4f5ff' },
-  backText: { color: '#6366f1', fontWeight: '600', marginBottom: 8 },
-  title: { fontSize: 26, fontWeight: '800', color: '#1f2937' },
-  topic: { marginTop: 4, color: '#4f46e5', fontWeight: '700' },
-  actionRow: { marginTop: 8, marginBottom: 6, alignItems: 'flex-start' },
-  practiceButton: {
-    backgroundColor: '#6366f1',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
+  safeArea: { flex: 1, backgroundColor: NB.color.bg },
+  scroll: { flex: 1 },
+  center: { alignItems: 'center', justifyContent: 'center' },
+
+  loadingCard: {
+    alignItems: 'center',
+    gap: 16,
+    paddingHorizontal: 40,
+    paddingVertical: 32,
   },
-  practiceText: { color: '#ffffff', fontWeight: '700' },
+  loadingText: { fontSize: 14, color: NB.color.text, fontWeight: '700' },
+
+  backPillWrap: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
+
+  // Word header
+  wordHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+  wordIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: NB.radius.sm,
+    backgroundColor: NB.color.accentLight,
+    borderWidth: NB.border.regular,
+    borderColor: NB.color.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...(Platform.OS === 'web' ? { boxShadow: '3px 3px 0px #111111' } : {}),
+  },
+  wordHeaderText: { flex: 1 },
+  wordTitle: {
+    fontSize: 32,
+    fontWeight: '900',
+    color: NB.color.text,
+    letterSpacing: -0.5,
+  },
+
+  // CTA
+  ctaRow: { paddingHorizontal: 20, marginBottom: 20, alignItems: 'flex-start' },
+
+  // Media
+  mediaCardWrapper: {
+    paddingHorizontal: 20,
+    marginBottom: 20,
+  },
   mediaCard: {
-    marginTop: 12,
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e0e7ff',
     overflow: 'hidden',
   },
-  video: { width: '100%', height: 240, backgroundColor: '#000' },
-  image: { width: '100%', height: 240, backgroundColor: '#00000010' },
-  meaningCard: {
-    marginTop: 12,
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e0e7ff',
-    padding: 14,
+  video: { width: '100%', height: 320, backgroundColor: '#0F172A' },
+  imagePlaceholder: {
+    height: 240,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: NB.color.mutedBg,
+    gap: 12,
   },
-  meaningTitle: { fontSize: 16, fontWeight: '700', color: '#374151', marginBottom: 6 },
-  meaningText: { color: '#4b5563', fontSize: 15, lineHeight: 22 },
-  center: { alignItems: 'center', justifyContent: 'center' },
-  centerText: { marginTop: 8, color: '#6b7280' },
+  noMedia: {
+    height: 200,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: NB.color.mutedBg,
+    gap: 10,
+  },
+  noMediaText: { fontSize: 14, color: NB.color.text, fontWeight: '700' },
+
+  // Cards padding
+  cardPadding: {
+    paddingHorizontal: 20,
+    marginBottom: 16,
+  },
+
+  // Meaning
+  meaningCard: {
+    gap: 12,
+  },
+  meaningHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  meaningHeaderTitle: { fontSize: 16, fontWeight: '900', color: NB.color.text },
+  meaningText: { fontSize: 15, color: NB.color.text, fontWeight: '600', lineHeight: 24 },
+
+  // Tip
+  tipCard: {
+    borderRadius: NB.radius.md,
+  },
+  tipContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  tipText: { flex: 1, fontSize: 13, color: NB.color.text, fontWeight: '700', lineHeight: 19 },
 });
-
-

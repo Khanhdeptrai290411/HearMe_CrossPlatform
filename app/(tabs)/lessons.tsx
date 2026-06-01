@@ -1,16 +1,25 @@
 import { useState, useEffect } from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Dimensions, Platform } from "react-native";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Platform, Animated } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Lesson from "../../components/Lesson";
 import { API_CONFIG, getApiUrl } from "../../constants/config";
-import React, { useEffect as useEffectReact } from "react";
+import React, { useEffect as useEffectReact, useRef } from "react";
 import { useFocusEffect } from "expo-router";
+import { NB } from "@/constants/theme";
+import { useLanguage } from "@/contexts/LanguageContext";
+import BrutalProgress from "@/components/ui/ds/ProgressBar";
+import BrutalLoader from "@/components/ui/ds/PageLoader";
+import BrutalButton from "@/components/ui/ds/Button";
+import BrutalCard from "@/components/ui/ds/Card";
+import BrutalBadge from "@/components/ui/ds/Badge";
+import BrutalIcon from "@/components/ui/ds/BrutalIcon";
+import PageHeader from "@/components/ui/ds/PageHeader";
+import { useAuth } from "@/contexts/AuthContext";
 
-// Quiet logs in production
 const DEBUG_LOG = false;
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const isTablet = SCREEN_WIDTH >= 768;
 const isWeb = Platform.OS === 'web';
 
@@ -19,11 +28,7 @@ interface LessonData {
   name: string;
   path: string;
 }
-
-interface Roadmap {
-  [key: string]: LessonData[];
-}
-
+interface Roadmap { [key: string]: LessonData[]; }
 interface SelectedLesson extends LessonData {
   chapterName: string;
   lessonIndex: number;
@@ -37,77 +42,49 @@ export default function LessonsScreen() {
   const [selectedLesson, setSelectedLesson] = useState<SelectedLesson | null>(null);
   const [completedLessons, setCompletedLessons] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [sidebarVisible, setSidebarVisible] = useState(false); // Sidebar ẩn trên iPad
+  const [sidebarVisible, setSidebarVisible] = useState(false);
+  const { user } = useAuth();
+  const { t } = useLanguage();
+
+  const sidebarAnim = useRef(new Animated.Value(-320)).current;
+
+  const showSidebar = () => {
+    setSidebarVisible(true);
+    Animated.spring(sidebarAnim, { toValue: 0, useNativeDriver: true, tension: 80, friction: 12 }).start();
+  };
+  const hideSidebar = () => {
+    Animated.spring(sidebarAnim, { toValue: -320, useNativeDriver: true, tension: 80, friction: 12 }).start(() => {
+      setSidebarVisible(false);
+    });
+  };
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Lấy roadmap từ backend
-        DEBUG_LOG && console.log("Fetching roadmap from:", getApiUrl(API_CONFIG.ENDPOINTS.ROADMAP));
         const response = await fetch(getApiUrl(API_CONFIG.ENDPOINTS.ROADMAP));
         if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
         const data = await response.json();
         setRoadmap(data);
-        
 
-        // Lấy danh sách bài học đã hoàn thành
         const token = await AsyncStorage.getItem('token');
-        DEBUG_LOG && console.log("Token from AsyncStorage:", token ? "Found" : "Not found");
-        
         const userStr = await AsyncStorage.getItem('user');
-        DEBUG_LOG && console.log("User data from AsyncStorage:", userStr);
-        
         if (token) {
-          let user;
-          try {
-            user = userStr ? JSON.parse(userStr) : null;
-            DEBUG_LOG && console.log("Parsed user data:", user);
-          } catch (parseError) {
-            console.error("Error parsing user data:", parseError);
-            await AsyncStorage.removeItem('user');
-            return;
-          }
-          
-          if (user && user.id) {
-            DEBUG_LOG && console.log("Fetching progress for user ID:", user.id);
+          let u;
+          try { u = userStr ? JSON.parse(userStr) : null; } catch { await AsyncStorage.removeItem('user'); return; }
+          if (u?.id) {
             try {
-              const progressUrl = getApiUrl(`${API_CONFIG.ENDPOINTS.USER_PROGRESS}/${user.id}`);
-              DEBUG_LOG && console.log("Fetching progress from:", progressUrl);
+              const progressUrl = getApiUrl(`${API_CONFIG.ENDPOINTS.USER_PROGRESS}/${u.id}`);
               const progressResponse = await fetch(progressUrl, {
-                headers: {
-                  'Authorization': `Bearer ${token}`,
-                  'Accept': 'application/json',
-                  'Content-Type': 'application/json'
-                }
+                headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
               });
-            
-              DEBUG_LOG && console.log("Progress response status:", progressResponse.status);
               const responseText = await progressResponse.text();
-              DEBUG_LOG && console.log("Raw response:", responseText);
-              
               if (progressResponse.ok) {
-                try {
-                  const completedVideoIds = JSON.parse(responseText);
-                  DEBUG_LOG && console.log("Raw completed video IDs:", completedVideoIds);
-                  const normalizedIds = completedVideoIds.map((id: any) => String(id));
-                  DEBUG_LOG && console.log("Completed video IDs (normalized):", normalizedIds);
-                  setCompletedLessons(normalizedIds);
-                } catch (parseError) {
-                  console.error("Error parsing response:", parseError);
-                }
-              } else {
-                console.error("Error response:", responseText);
+                const completedVideoIds = JSON.parse(responseText);
+                setCompletedLessons(completedVideoIds.map((id: any) => String(id)));
               }
-            } catch (fetchError) {
-              console.error("Error fetching progress:", fetchError);
-            }
-          } else {
-            DEBUG_LOG && console.log("No valid user data in AsyncStorage");
+            } catch (e) { DEBUG_LOG && console.error(e); }
           }
-        } else {
-          DEBUG_LOG && console.log("No token found - user not logged in");
         }
-        
         setLoading(false);
       } catch (error) {
         console.error("Lỗi lấy dữ liệu:", error);
@@ -117,7 +94,6 @@ export default function LessonsScreen() {
     fetchData();
   }, []);
 
-  // Điều hướng từ Thư viện: nếu có từ khóa cần học thì tự chọn bài tương ứng
   const selectFromDictionary = async () => {
     try {
       const word = await AsyncStorage.getItem('dictionarySearchWord');
@@ -129,17 +105,11 @@ export default function LessonsScreen() {
       let found: { chapterName: string; lesson: LessonData; index: number } | null = null;
       for (const [chapterName, lessons] of Object.entries(roadmap)) {
         const idx = lessons.findIndex(l => {
-          const byName =
-            target.length > 0 &&
-            (l.name?.toUpperCase() === target || l.name?.toUpperCase().includes(target));
-          const byFile =
-            targetFile.length > 0 && typeof l.path === 'string' && l.path.endsWith(targetFile);
+          const byName = target.length > 0 && (l.name?.toUpperCase() === target || l.name?.toUpperCase().includes(target));
+          const byFile = targetFile.length > 0 && typeof l.path === 'string' && l.path.endsWith(targetFile);
           return byName || byFile;
         });
-        if (idx !== -1) {
-          found = { chapterName, lesson: lessons[idx], index: idx + 1 };
-          break;
-        }
+        if (idx !== -1) { found = { chapterName, lesson: lessons[idx], index: idx + 1 }; break; }
       }
       if (found) {
         handleLessonSelect(found.lesson, found.chapterName, found.index);
@@ -151,15 +121,10 @@ export default function LessonsScreen() {
   };
 
   useEffectReact(() => {
-    const run = async () => {
-      try {
-        await selectFromDictionary();
-      } catch {}
-    };
+    const run = async () => { try { await selectFromDictionary(); } catch {} };
     run();
   }, [roadmap]);
 
-  // Cũng kiểm tra mỗi lần màn hình Lessons được focus (đi từ Thư viện qua lần 2+)
   useFocusEffect(
     React.useCallback(() => {
       selectFromDictionary();
@@ -167,70 +132,39 @@ export default function LessonsScreen() {
     }, [roadmap])
   );
 
-  // Cập nhật progress định kỳ
   useEffect(() => {
     const updateProgress = async () => {
       try {
         const token = await AsyncStorage.getItem('token');
         const userStr = await AsyncStorage.getItem('user');
-        let user;
-        try {
-          user = userStr ? JSON.parse(userStr) : null;
-        } catch (parseError) {
-          console.error("Error parsing user data:", parseError);
-          await AsyncStorage.removeItem('user');
-          return;
-        }
-      
-        if (token && user?.id) {
-          // Silently fetch progress update every 5 seconds
-          
-          const progressUrl = getApiUrl(`${API_CONFIG.ENDPOINTS.USER_PROGRESS}/${user.id}`);
+        let u;
+        try { u = userStr ? JSON.parse(userStr) : null; } catch { await AsyncStorage.removeItem('user'); return; }
+        if (token && u?.id) {
+          const progressUrl = getApiUrl(`${API_CONFIG.ENDPOINTS.USER_PROGRESS}/${u.id}`);
           const progressResponse = await fetch(progressUrl, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Accept': 'application/json',
-              'Content-Type': 'application/json'
-            }
+            headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' }
           });
-          
           const responseText = await progressResponse.text();
-          
           if (progressResponse.ok) {
             try {
               const completedVideoIds = JSON.parse(responseText);
-              
               if (Array.isArray(completedVideoIds)) {
                 const normalizedIds = completedVideoIds.map((id: any) => String(id));
-                
                 setCompletedLessons(prev => {
                   const prevIds = new Set(prev);
                   const newIds = new Set(normalizedIds);
-                  
-                  const hasChanges = prevIds.size !== newIds.size || 
-                    [...prevIds].some(id => !newIds.has(id)) ||
-                    [...newIds].some(id => !prevIds.has(id));
-                    
-                  if (hasChanges) {
-                    console.log("Updating state with new values:", normalizedIds);
-                    return normalizedIds;
-                  }
-                  return prev;
+                  const hasChanges = prevIds.size !== newIds.size ||
+                    [...prevIds].some(id => !newIds.has(id)) || [...newIds].some(id => !prevIds.has(id));
+                  return hasChanges ? normalizedIds : prev;
                 });
               }
-            } catch (parseError) {
-              console.error("Error parsing response:", parseError);
-            }
+            } catch {}
           }
         }
-      } catch (error) {
-        console.error("Network or other error:", error);
-      }
+      } catch {}
     };
-
     const interval = setInterval(updateProgress, 5000);
     updateProgress();
-    
     return () => clearInterval(interval);
   }, []);
 
@@ -239,458 +173,440 @@ export default function LessonsScreen() {
   };
 
   const handleLessonSelect = (lesson: LessonData, chapterName: string, lessonIndex: number) => {
-    console.log("Selecting lesson:", { lesson, chapterName, lessonIndex });
     const [modelId] = chapterName.split('-');
-    
     setSelectedLesson({
       ...lesson,
       chapterName: chapterName.split('-')[1] || chapterName,
       lessonIndex,
       modelId: parseInt(modelId),
-      fullChapterName: chapterName
+      fullChapterName: chapterName,
     });
     setExpandedChapter(chapterName);
   };
 
   const handleNextLesson = (currentChapter: string, nextLessonIndex: number) => {
-    console.log("handleNextLesson called with chapter:", currentChapter, "lesson index:", nextLessonIndex);
-    
     const chapters = Object.entries(roadmap).sort((a, b) => {
-      const [modelIdA] = a[0].split('-');
-      const [modelIdB] = b[0].split('-');
+      const [modelIdA] = a[0].split('-'); const [modelIdB] = b[0].split('-');
       const modelCompare = parseInt(modelIdA) - parseInt(modelIdB);
-      if (modelCompare !== 0) return modelCompare;
-      return a[0].localeCompare(b[0]);
+      return modelCompare !== 0 ? modelCompare : a[0].localeCompare(b[0]);
     });
-    
-    if (chapters.length === 0) {
-      console.log("Roadmap is empty");
-      return;
-    }
-
+    if (!chapters.length) return;
     const currentChapterEntry = chapters.find(([name]) => name === currentChapter);
-    if (!currentChapterEntry) {
-      console.log("Chapter not found:", currentChapter);
-      return;
-    }
-
+    if (!currentChapterEntry) return;
     const [chapterName, lessons] = currentChapterEntry;
-
     if (nextLessonIndex <= lessons.length) {
-      console.log("Moving to lesson", nextLessonIndex, "in chapter", chapterName);
       const lesson = lessons[nextLessonIndex - 1];
-      if (!lesson) {
-        console.log("Lesson not found");
-        return;
-      }
-
+      if (!lesson) return;
       const [modelId] = chapterName.split('-');
-
-      setSelectedLesson({
-        ...lesson,
-        chapterName: chapterName.split('-')[1] || chapterName,
-        lessonIndex: nextLessonIndex,
-        modelId: parseInt(modelId),
-        fullChapterName: chapterName
-      });
+      setSelectedLesson({ ...lesson, chapterName: chapterName.split('-')[1] || chapterName, lessonIndex: nextLessonIndex, modelId: parseInt(modelId), fullChapterName: chapterName });
       setExpandedChapter(chapterName);
       return;
     }
-
     const currentIndex = chapters.indexOf(currentChapterEntry);
     if (currentIndex < chapters.length - 1) {
       const [nextChapterName, nextChapterLessons] = chapters[currentIndex + 1];
-      
       if (nextChapterLessons.length > 0) {
-        console.log("Starting first lesson of chapter", nextChapterName);
         const [modelId] = nextChapterName.split('-');
-        
-        const firstLesson = nextChapterLessons[0];
-        setSelectedLesson({
-          ...firstLesson,
-          chapterName: nextChapterName.split('-')[1] || nextChapterName,
-          lessonIndex: 1,
-          modelId: parseInt(modelId),
-          fullChapterName: nextChapterName
-        });
+        setSelectedLesson({ ...nextChapterLessons[0], chapterName: nextChapterName.split('-')[1] || nextChapterName, lessonIndex: 1, modelId: parseInt(modelId), fullChapterName: nextChapterName });
         setExpandedChapter(nextChapterName);
       }
-    } else {
-      console.log("Completed all lessons!");
     }
   };
 
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#6366f1" />
-        <Text style={styles.loadingText}>Đang tải...</Text>
+  // Total progress
+  const totalLessons = Object.values(roadmap).reduce((s, ls) => s + ls.length, 0);
+  const totalCompleted = completedLessons.length;
+  const overallProgress = totalLessons > 0 ? totalCompleted / totalLessons : 0;
+
+  // Find first incomplete lesson
+  const firstIncomplete = (() => {
+    for (const [ch, lessons] of Object.entries(roadmap)) {
+      for (let i = 0; i < lessons.length; i++) {
+        if (!completedLessons.includes(String(lessons[i].id))) {
+          return { lesson: lessons[i], chapter: ch, index: i + 1 };
+        }
+      }
+    }
+    return null;
+  })();
+
+  if (loading) return <BrutalLoader />;
+
+  const SidebarContent = () => (
+    <ScrollView style={styles.sidebarScroll} showsVerticalScrollIndicator={false}>
+      <View style={styles.sidebarHeader}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.sidebarTitle}>{t('lessons.title')}</Text>
+          <Text style={styles.sidebarSubtitle}>{totalCompleted}/{totalLessons} {t('lessons.subtitle')}</Text>
+        </View>
+        {isTablet && (
+          <TouchableOpacity onPress={hideSidebar} style={styles.closeBtn}>
+            <BrutalIcon name="close" size={16} color={NB.color.text} />
+          </TouchableOpacity>
+        )}
       </View>
-    );
-  }
+      <View style={{ paddingHorizontal: 20, paddingBottom: 16 }}>
+        <BrutalProgress progress={overallProgress} height={6} showPercent />
+      </View>
 
-  return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-    <View style={styles.container}>
-      {/* Hamburger button - chỉ hiện khi sidebar ẩn */}
-      {isTablet && !sidebarVisible && (
-        <TouchableOpacity
-          style={styles.hamburgerButton}
-          onPress={() => setSidebarVisible(true)}
-        >
-          <Text style={styles.hamburgerIcon}>☰</Text>
-        </TouchableOpacity>
-      )}
+      {Object.entries(roadmap).map(([chapter, lessons]) => {
+        const displayName = chapter.split('-')[1] || chapter;
+        const completedInChapter = lessons.filter(l => completedLessons.includes(String(l.id))).length;
+        const chapterProgress = lessons.length > 0 ? completedInChapter / lessons.length : 0;
+        const isExpanded = expandedChapter === chapter;
 
-      {/* Sidebar - mobile: ẩn khi có selectedLesson, iPad: chỉ hiện khi sidebarVisible */}
-      {(!isTablet && !selectedLesson) || (isTablet && sidebarVisible) ? (
-        <>
-          {/* Backdrop cho iPad */}
-          {isTablet && sidebarVisible && (
-            <TouchableOpacity
-              style={styles.backdrop}
-              activeOpacity={1}
-              onPress={() => setSidebarVisible(false)}
-            />
-          )}
-          <ScrollView style={[
-            styles.sidebar,
-            isTablet && styles.sidebarTabletOverlay
-          ]}>
-            <View style={styles.sidebarHeader}>
-              <Text style={styles.sidebarTitle}>Lộ Trình Học</Text>
-              {isTablet && (
-                <TouchableOpacity onPress={() => setSidebarVisible(false)}>
-                  <Text style={styles.closeButton}>✕</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-        {Object.entries(roadmap).map(([chapter, lessons]) => {
-          const displayName = chapter.split('-')[1] || chapter;
-          
-          const completedInChapter = lessons.filter(lesson => 
-            completedLessons.includes(String(lesson.id))
-          ).length;
-          
-          return (
-            <View key={chapter} style={styles.chapterContainer}>
-              <TouchableOpacity
-                style={styles.chapterButton}
-                onPress={() => toggleChapter(chapter)}
-              >
+        return (
+          <View key={chapter} style={[styles.chapterWrap, isExpanded && styles.chapterWrapExpanded]}>
+            <TouchableOpacity style={styles.chapterBtn} onPress={() => toggleChapter(chapter)} activeOpacity={0.8}>
+              <View style={styles.chapterBtnLeft}>
                 <Text style={styles.chapterTitle}>{displayName}</Text>
-                <View style={styles.chapterInfo}>
-                  <Text style={styles.progressText}>
-                    {completedInChapter}/{lessons.length}
-                  </Text>
-                  <Text style={styles.expandIcon}>
-                    {expandedChapter === chapter ? "▼" : "▶"}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-              {expandedChapter === chapter && (
-                <View style={styles.lessonsList}>
-                  {lessons.map((lesson, idx) => {
-                    const isCompleted = completedLessons.includes(String(lesson.id));
-                    const isSelected = selectedLesson?.path === lesson.path;
-                    
-                    return (
-                      <TouchableOpacity
-                        key={lesson.path}
+                <BrutalProgress progress={chapterProgress} height={4} style={{ marginTop: 6 }} color={NB.color.accent} />
+              </View>
+              <View style={styles.chapterBtnRight}>
+                <BrutalBadge label={`${completedInChapter}/${lessons.length}`} variant="secondary" />
+                <Text style={styles.chapterArrow}>{isExpanded ? '▼' : '▶'}</Text>
+              </View>
+            </TouchableOpacity>
+
+            {isExpanded && (
+              <View style={styles.lessonsList}>
+                {lessons.map((lesson, idx) => {
+                  const isCompleted = completedLessons.includes(String(lesson.id));
+                  const isSelected = selectedLesson?.path === lesson.path;
+                  return (
+                    <TouchableOpacity
+                      key={lesson.path}
+                      style={[
+                        styles.lessonItem,
+                        isSelected && styles.lessonItemSelected,
+                        isCompleted && !isSelected && styles.lessonItemCompleted
+                      ]}
+                      onPress={() => { handleLessonSelect(lesson, chapter, idx + 1); if (isTablet) hideSidebar(); }}
+                      activeOpacity={0.85}
+                    >
+                      <View style={[
+                        styles.lessonStatusIcon,
+                        isSelected && styles.statusIconSelected,
+                        isCompleted && !isSelected && styles.statusIconCompleted
+                      ]}>
+                        {isCompleted
+                          ? <BrutalIcon name="check" size={12} color={isSelected ? '#FFFFFF' : '#00C2A8'} strokeWidth={3} />
+                          : <Text style={[styles.statusTextDot, isSelected && { color: '#FFFFFF' }]}>○</Text>
+                        }
+                      </View>
+                      <Text
                         style={[
-                          styles.lessonItem,
-                          isSelected && styles.lessonItemSelected,
-                          isCompleted && !isSelected && styles.lessonItemCompleted
-                        ]}
-                        onPress={() => handleLessonSelect(lesson, chapter, idx + 1)}
-                      >
-                        <Text style={[
                           styles.lessonText,
                           isSelected && styles.lessonTextSelected,
                           isCompleted && !isSelected && styles.lessonTextCompleted
-                        ]}>
-                          {lesson.name}
-                        </Text>
-                        {isCompleted && (
-                          <Text style={[
-                            styles.checkmark,
-                            isSelected && styles.checkmarkSelected
-                          ]}>✓</Text>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              )}
-            </View>
-          );
-        })}
-        </ScrollView>
-        </>
-      ) : null}
-
-      {/* Main Content */}
-      <View
-        style={[
-          styles.mainContent,
-          selectedLesson && styles.mainContentFullWidth,
-          !isTablet && !selectedLesson && styles.mainContentHiddenMobile,
-        ]}
-      >
-        {selectedLesson ? (
-          <>
-            {/* Nút Back cho mobile */}
-            {!isTablet && (
-              <TouchableOpacity 
-                style={styles.backButton}
-                onPress={() => setSelectedLesson(null)}
-              >
-                <Text style={styles.backButtonText}>← Quay lại</Text>
-              </TouchableOpacity>
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {lesson.name}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
             )}
-            
-            <Lesson
-            lessonPath={selectedLesson.path}
-            lessonName={selectedLesson.name}
-            apiLessonPath={selectedLesson.path}
-            lessonInfo={{
-              modelId: selectedLesson.modelId,
-              chapterName: selectedLesson.chapterName,
-              fullChapterName: selectedLesson.fullChapterName,
-              lesson: selectedLesson.lessonIndex,
-              totalLessonsInChapter: roadmap[selectedLesson.fullChapterName]?.length || 0,
-              totalChapters: Object.keys(roadmap).length,
-            }}
-            onNextLesson={handleNextLesson}
-            />
-          </>
-        ) : isTablet ? (
-          <View style={styles.welcomeContainer}>
-            <Text style={styles.welcomeIcon}>📚</Text>
-            <Text style={styles.welcomeTitle}>Chào mừng bạn!</Text>
-            <Text style={styles.welcomeText}>
-              Hãy chọn một chương và bài học từ thanh bên trái để bắt đầu hành trình học tập của bạn.
-            </Text>
+          </View>
+        );
+      })}
+    </ScrollView>
+  );
+
+  return (
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+      <View style={styles.container}>
+        {/* Hamburger FAB */}
+        {isTablet && !sidebarVisible && (
+          <TouchableOpacity style={styles.fab} onPress={showSidebar} activeOpacity={0.88}>
+            <BrutalIcon name="menu" size={24} color="#FFF" />
+          </TouchableOpacity>
+        )}
+
+        {/* Sidebar — mobile: always visible if no lesson selected */}
+        {(!isTablet && !selectedLesson) ? (
+          <View style={styles.sidebarFixed}>
+            <SidebarContent />
           </View>
         ) : null}
+
+        {/* Sidebar overlay — tablet */}
+        {isTablet && sidebarVisible && (
+          <>
+            <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={hideSidebar} />
+            <Animated.View style={[styles.sidebarOverlay, { transform: [{ translateX: sidebarAnim }] }]}>
+              <SidebarContent />
+            </Animated.View>
+          </>
+        )}
+
+        {/* Main Content */}
+        <View style={[styles.main, !isTablet && !selectedLesson && styles.mainHidden]}>
+          {selectedLesson ? (
+            <>
+              {!isTablet && (
+                <TouchableOpacity style={styles.backBtn} onPress={() => setSelectedLesson(null)} activeOpacity={0.8}>
+                  <Text style={styles.backBtnText}>{t('lessons.backToRoadmap')}</Text>
+                </TouchableOpacity>
+              )}
+              <Lesson
+                lessonPath={selectedLesson.path}
+                lessonName={selectedLesson.name}
+                apiLessonPath={selectedLesson.path}
+                lessonInfo={{
+                  modelId: selectedLesson.modelId,
+                  chapterName: selectedLesson.chapterName,
+                  fullChapterName: selectedLesson.fullChapterName,
+                  lesson: selectedLesson.lessonIndex,
+                  totalLessonsInChapter: roadmap[selectedLesson.fullChapterName]?.length || 0,
+                  totalChapters: Object.keys(roadmap).length,
+                }}
+                onNextLesson={handleNextLesson}
+              />
+            </>
+          ) : isTablet ? (
+            /* Welcome dashboard */
+            <View style={styles.welcomeWrap}>
+              <Text style={styles.welcomeGreet}>
+                {t('lessons.welcome')}{user?.fullName ? `, ${user.fullName.split(' ').pop()}` : ''}! 👋
+              </Text>
+              <Text style={styles.welcomeTitle}>{t('lessons.selectLesson')}</Text>
+              
+              <BrutalCard style={styles.welcomeProgressCard}>
+                <BrutalProgress
+                  progress={overallProgress}
+                  label={t('lessons.progressCardTitle')}
+                  showPercent
+                  height={12}
+                />
+                <Text style={styles.welcomeProgressNote}>
+                  {t('lessons.overallProgressNote', { completed: totalCompleted, total: totalLessons })}
+                </Text>
+              </BrutalCard>
+
+              {firstIncomplete && (
+                <TouchableOpacity
+                  style={styles.continueBtn}
+                  onPress={() => handleLessonSelect(firstIncomplete.lesson, firstIncomplete.chapter, firstIncomplete.index)}
+                  activeOpacity={0.9}
+                >
+                  <View style={styles.continueBtnContent}>
+                    <BrutalIcon name="play" size={24} color="#FFF" />
+                    <View style={styles.continueBtnTextWrap}>
+                      <Text style={styles.continueBtnLabel}>{t('lessons.continueLearning')}</Text>
+                      <Text style={styles.continueBtnSub}>{firstIncomplete.lesson.name}</Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              )}
+
+              <BrutalCard style={styles.hintCard} color={NB.color.secondaryLight}>
+                <View style={styles.hintContent}>
+                  <BrutalIcon name="menu" size={20} color={NB.color.text} />
+                  <Text style={styles.hintText}>{t('lessons.selectLessonHint')}</Text>
+                </View>
+              </BrutalCard>
+            </View>
+          ) : null}
+        </View>
       </View>
-    </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
+  safeArea: { flex: 1, backgroundColor: NB.color.bg },
+  container: { flex: 1, flexDirection: isTablet ? 'row' : 'column', backgroundColor: NB.color.bg },
+
+  // FAB
+  fab: {
+    position: 'absolute', top: 20, left: 20, zIndex: 200,
+    width: 52, height: 52, borderRadius: NB.radius.sm,
+    backgroundColor: NB.color.primary,
+    borderWidth: NB.border.regular,
+    borderColor: NB.color.border,
+    justifyContent: 'center', alignItems: 'center',
+    ...(Platform.OS === 'web' ? { boxShadow: '4px 4px 0px #111111' } : {}),
+  },
+
+  // Backdrop
+  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(17,17,17,0.4)', zIndex: 150 },
+
+  // Sidebar — fixed (mobile)
+  sidebarFixed: {
+    width: '100%',
     flex: 1,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: NB.color.surface,
   },
-  container: {
-    flex: 1,
-    flexDirection: isTablet ? 'row' : 'column',
-    backgroundColor: '#f3f4f6',
+  // Sidebar — overlay (tablet)
+  sidebarOverlay: {
+    position: 'absolute', top: 0, left: 0, bottom: 0, width: 320, zIndex: 160,
+    backgroundColor: NB.color.surface,
+    borderRightWidth: NB.border.thick,
+    borderRightColor: NB.color.border,
+    ...(Platform.OS === 'web' ? { boxShadow: '5px 0 0px #111111' } : {}),
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f3f4f6',
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: '#6366f1',
-  },
-  // Hamburger button
-  hamburgerButton: {
-    position: 'absolute',
-    top: 20,
-    left: 20,
-    zIndex: 9999,
-    backgroundColor: '#6366f1',
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 10,
-  },
-  hamburgerIcon: {
-    fontSize: 24,
-    color: '#ffffff',
-    fontWeight: 'bold',
-  },
-  // Backdrop overlay
-  backdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    zIndex: 999,
-  },
-  // Sidebar
-  sidebar: {
-    width: isTablet ? 320 : SCREEN_WIDTH,
-    backgroundColor: '#ffffff',
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 2, height: 0 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  sidebarTabletOverlay: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 320,
-    zIndex: 1000,
-  },
+  sidebarScroll: { flex: 1, backgroundColor: NB.color.bg },
   sidebarHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    padding: 20,
+    gap: 12,
   },
-  sidebarTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#4338ca',
+  sidebarTitle: { fontSize: 20, fontWeight: '900', color: NB.color.text },
+  sidebarSubtitle: { fontSize: 13, color: NB.color.muted, fontWeight: '700', marginTop: 2 },
+  closeBtn: {
+    width: 36, height: 36, borderRadius: NB.radius.sm,
+    backgroundColor: NB.color.mutedBg,
+    borderWidth: NB.border.regular,
+    borderColor: NB.color.border,
+    justifyContent: 'center', alignItems: 'center',
   },
-  closeButton: {
-    fontSize: 28,
-    color: '#6366f1',
-    fontWeight: 'bold',
-    paddingHorizontal: 8,
-  },
-  chapterContainer: {
-    marginBottom: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
+
+  // Chapter
+  chapterWrap: {
+    backgroundColor: NB.color.surface,
+    borderWidth: NB.border.regular,
+    borderColor: NB.color.border,
+    marginHorizontal: 16,
+    marginVertical: 8,
+    borderRadius: NB.radius.md,
     overflow: 'hidden',
+    ...(Platform.OS === 'web' ? { boxShadow: '3px 3px 0px #111111' } : {}),
   },
-  chapterButton: {
-    backgroundColor: '#c7d2fe',
-    padding: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  chapterWrapExpanded: {
+    backgroundColor: NB.color.surface,
   },
-  chapterTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#3730a3',
-    flex: 1,
-  },
-  chapterInfo: {
+  chapterBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    padding: 16,
+    gap: 12,
   },
-  progressText: {
-    fontSize: 14,
-    color: '#4f46e5',
-  },
-  expandIcon: {
-    fontSize: 12,
-    color: '#3730a3',
-  },
+  chapterBtnLeft: { flex: 1 },
+  chapterTitle: { fontSize: 15, fontWeight: '900', color: NB.color.text },
+  chapterBtnRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  chapterArrow: { fontSize: 14, color: NB.color.text, fontWeight: '900' },
+
+  // Lessons list
   lessonsList: {
-    backgroundColor: '#e0e7ff',
-    padding: 8,
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+    gap: 6,
+    borderTopWidth: NB.border.thin,
+    borderTopColor: NB.color.border,
+    paddingTop: 12,
+    backgroundColor: NB.color.bg,
   },
   lessonItem: {
-    backgroundColor: 'transparent',
-    padding: 12,
-    borderRadius: 6,
-    marginVertical: 4,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    padding: 12,
+    borderRadius: NB.radius.sm,
+    borderWidth: NB.border.regular,
+    borderColor: NB.color.border,
+    backgroundColor: NB.color.surface,
+    gap: 10,
+    ...(Platform.OS === 'web' ? { boxShadow: '2px 2px 0px #111111' } : {}),
   },
   lessonItemSelected: {
-    backgroundColor: '#818cf8',
+    backgroundColor: NB.color.primary,
   },
   lessonItemCompleted: {
-    backgroundColor: '#bbf7d0',
+    backgroundColor: NB.color.accentLight,
   },
-  lessonText: {
-    fontSize: 14,
-    color: '#1e1b4b',
+  lessonStatusIcon: {
+    width: 22, height: 22, borderRadius: 11,
+    borderWidth: NB.border.regular,
+    borderColor: NB.color.border,
+    backgroundColor: NB.color.surface,
+    alignItems: 'center', justifyContent: 'center',
   },
-  lessonTextSelected: {
-    color: '#ffffff',
-    fontWeight: '600',
+  statusIconSelected: {
+    borderColor: '#FFFFFF',
+    backgroundColor: NB.color.primary,
   },
-  lessonTextCompleted: {
-    color: '#166534',
+  statusIconCompleted: {
+    borderColor: NB.color.border,
+    backgroundColor: NB.color.accent,
   },
-  checkmark: {
-    fontSize: 18,
-    color: '#16a34a',
+  statusTextDot: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: NB.color.muted,
   },
-  checkmarkSelected: {
-    color: '#ffffff',
-  },
-  mainContent: {
-    flex: 1,
-    padding: isTablet ? 12 : 8,
-    width: '100%',
-  },
-  mainContentFullWidth: {
-    flex: 1,
-    width: '100%',
-  },
-  mainContentHiddenMobile: {
-    display: 'none',
-    height: 0,
-    padding: 0,
-    margin: 0,
-  },
-  backButton: {
+  lessonText: { flex: 1, fontSize: 14, fontWeight: '700', color: NB.color.text },
+  lessonTextSelected: { color: '#FFFFFF', fontWeight: '900' },
+  lessonTextCompleted: { color: NB.color.text },
+
+  // Main
+  main: { flex: 1, backgroundColor: NB.color.bg },
+  mainHidden: { display: 'none' },
+
+  // Back button (mobile)
+  backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    margin: 16,
     paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: '#6366f1',
-    borderRadius: 8,
-    marginBottom: 16,
+    paddingHorizontal: 20,
+    backgroundColor: NB.color.surface,
+    borderRadius: NB.radius.sm,
+    borderWidth: NB.border.regular,
+    borderColor: NB.color.border,
     alignSelf: 'flex-start',
+    ...(Platform.OS === 'web' ? { boxShadow: '3px 3px 0px #111111' } : {}),
   },
-  backButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  welcomeContainer: {
+  backBtnText: { color: NB.color.text, fontWeight: '900', fontSize: 14 },
+
+  // Welcome dashboard
+  welcomeWrap: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    padding: 32,
+    gap: 24,
+    maxWidth: 600,
+    alignSelf: 'center',
+    width: '100%',
   },
-  welcomeIcon: {
-    fontSize: 80,
-    marginBottom: 16,
+  welcomeGreet: { fontSize: 16, color: NB.color.primary, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 },
+  welcomeTitle: { fontSize: 32, fontWeight: '900', color: NB.color.text, textAlign: 'center', letterSpacing: -0.5 },
+  welcomeProgressCard: {
+    width: '100%',
+    gap: 12,
   },
-  welcomeTitle: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: '#4f46e5',
-    marginBottom: 8,
+  welcomeProgressNote: { fontSize: 13, color: NB.color.muted, fontWeight: '700', textAlign: 'right' },
+  continueBtn: {
+    width: '100%',
+    backgroundColor: NB.color.primary,
+    borderRadius: NB.radius.md,
+    borderWidth: NB.border.thick,
+    borderColor: NB.color.border,
+    padding: 20,
+    ...(Platform.OS === 'web' ? { boxShadow: '6px 6px 0px #111111', cursor: 'pointer' } : {}),
   },
-  welcomeText: {
-    fontSize: 16,
-    color: '#6b7280',
-    textAlign: 'center',
-    maxWidth: 400,
-    lineHeight: 24,
+  continueBtnContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
   },
+  continueBtnTextWrap: {
+    flex: 1,
+  },
+  continueBtnLabel: { fontSize: 16, fontWeight: '900', color: '#FFFFFF', letterSpacing: 0.5 },
+  continueBtnSub: { fontSize: 14, color: '#EBEBFF', fontWeight: '700', marginTop: 2 },
+  hintCard: {
+    width: '100%',
+    borderRadius: NB.radius.sm,
+  },
+  hintContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  hintText: { fontSize: 13, color: NB.color.text, fontWeight: '700', flex: 1 },
 });
-

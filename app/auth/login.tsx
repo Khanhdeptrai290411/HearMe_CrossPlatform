@@ -1,115 +1,141 @@
 import { useState } from "react";
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  ActivityIndicator,
+  View, Text, TextInput, TouchableOpacity, StyleSheet,
+  Alert, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { NB } from "@/constants/theme";
+import BrutalCard from "@/components/ui/ds/Card";
+import BrutalButton from "@/components/ui/ds/Button";
+import BrutalIcon from "@/components/ui/ds/BrutalIcon";
+import BrutalBadge from "@/components/ui/ds/Badge";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPass, setShowPass] = useState(false);
   const router = useRouter();
   const { signIn } = useAuth();
+  const { t, locale } = useLanguage();
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert("Lỗi", "Vui lòng điền đầy đủ thông tin");
+      Alert.alert(t('common.error'), t('auth.alertMissing'));
       return;
     }
-
     setLoading(true);
     try {
       await signIn(email, password);
-      // AuthContext will automatically navigate to (tabs)
     } catch (error: any) {
       console.error("Login error:", error);
-      Alert.alert("Lỗi", error.message || "Đăng nhập thất bại");
+      Alert.alert(locale === 'ja' ? 'ログイン失敗' : 'Đăng nhập thất bại', error.message || (locale === 'ja' ? 'メールアドレスまたはパスワードが正しくありません' : 'Email hoặc mật khẩu không đúng'));
     } finally {
       setLoading(false);
     }
   };
 
-  const handleRegister = () => {
-    router.push('/auth/register');
-  };
-
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
+      style={styles.root}
     >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={styles.header}>
-          <Text style={styles.logo}>🎓</Text>
-          <Text style={styles.title}>Đăng Nhập</Text>
-          <Text style={styles.subtitle}>Chào mừng bạn trở lại!</Text>
-        </View>
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
 
-        <View style={styles.form}>
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="example@email.com"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              editable={!loading}
+        {/* centered BrutalCard */}
+        <BrutalCard style={styles.card} color={NB.color.surface}>
+
+          {/* Logo */}
+          <View style={styles.logoArea}>
+            <View style={styles.logoIconBox}>
+              <BrutalIcon name="hand" size={32} color={NB.color.text} />
+            </View>
+            <Text style={styles.logoText}>HearMe</Text>
+            <BrutalBadge label="Learn Sign Language with AI" variant="primary" style={{ marginTop: 6 }} />
+          </View>
+
+          {/* Form header */}
+          <Text style={styles.formTitle}>{t('auth.loginTitle')}</Text>
+          <Text style={styles.formSubtitle}>{t('auth.loginSubtitle')}</Text>
+
+          {/* Email field */}
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>{t('auth.labelEmail')}</Text>
+            <View style={styles.inputWrap}>
+              <BrutalIcon name="profile" size={16} color={NB.color.text} />
+              <TextInput
+                style={styles.input}
+                placeholder="example@email.com"
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                editable={!loading}
+                placeholderTextColor={NB.color.muted}
+                returnKeyType="next"
+              />
+            </View>
+          </View>
+
+          {/* Password field */}
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>{t('auth.labelPass')}</Text>
+            <View style={styles.inputWrap}>
+              <BrutalIcon name="lock" size={16} color={NB.color.text} />
+              <TextInput
+                style={[styles.input, { flex: 1 }]}
+                placeholder="••••••••"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPass}
+                editable={!loading}
+                placeholderTextColor={NB.color.muted}
+                returnKeyType="done"
+                onSubmitEditing={handleLogin}
+              />
+              <TouchableOpacity onPress={() => setShowPass(p => !p)} style={styles.eyeBtn}>
+                <Text style={styles.eyeIcon}>{showPass ? '🙈' : '👁️'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Submit */}
+          <View style={{ marginTop: 8 }}>
+            <BrutalButton
+              label={loading ? t('common.loading') : t('auth.submitLogin')}
+              variant="primary"
+              size="lg"
+              onPress={handleLogin}
+              disabled={loading}
+              loading={loading}
+              fullWidth
             />
           </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Mật khẩu</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="••••••••"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              editable={!loading}
-            />
-          </View>
-
-          <TouchableOpacity
-            style={[styles.button, styles.loginButton, loading && styles.buttonDisabled]}
-            onPress={handleLogin}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#ffffff" />
-            ) : (
-              <Text style={styles.buttonText}>Đăng nhập</Text>
-            )}
-          </TouchableOpacity>
-
+          {/* Divider */}
           <View style={styles.divider}>
             <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>hoặc</Text>
+            <Text style={styles.dividerText}>{t('auth.noAccount')}</Text>
             <View style={styles.dividerLine} />
           </View>
 
-          <TouchableOpacity
-            style={[styles.button, styles.registerButton]}
-            onPress={handleRegister}
+          {/* Register link */}
+          <BrutalButton
+            label={t('auth.registerLink')}
+            variant="ghost"
+            size="md"
+            onPress={() => router.push('/auth/register')}
             disabled={loading}
-          >
-            <Text style={styles.registerButtonText}>Tạo tài khoản mới</Text>
-          </TouchableOpacity>
-        </View>
+            fullWidth
+          />
+
+          {/* Footer */}
+          <Text style={styles.footerNote}>
+            {t('auth.footerNote')}
+          </Text>
+        </BrutalCard>
 
       </ScrollView>
     </KeyboardAvoidingView>
@@ -117,108 +143,68 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-  },
-  scrollContent: {
+  root: { flex: 1, backgroundColor: NB.color.bg },
+  scroll: {
     flexGrow: 1,
     justifyContent: 'center',
+    alignItems: 'center',
     padding: 24,
+    backgroundColor: NB.color.bg,
   },
-  header: {
-    alignItems: 'center',
-    marginBottom: 40,
-  },
-  logo: {
-    fontSize: 64,
-    marginBottom: 16,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#6b7280',
-  },
-  form: {
+
+  card: {
     width: '100%',
+    maxWidth: 420,
+    backgroundColor: NB.color.surface,
   },
-  inputGroup: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 10,
-    padding: 14,
-    fontSize: 16,
-    backgroundColor: '#f9fafb',
-  },
-  button: {
-    padding: 16,
-    borderRadius: 10,
-    alignItems: 'center',
+
+  // Logo
+  logoArea: { alignItems: 'center', marginBottom: 24 },
+  logoIconBox: {
+    width: 64,
+    height: 64,
+    borderRadius: NB.radius.sm,
+    backgroundColor: NB.color.secondary,
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
+    alignItems: 'center',
+    borderWidth: NB.border.regular,
+    borderColor: NB.color.border,
+    ...(Platform.OS === 'web' ? { boxShadow: '3px 3px 0px #111111' } : {}),
   },
-  loginButton: {
-    backgroundColor: '#6366f1',
-    marginBottom: 16,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  divider: {
+  logoText: { fontSize: 28, fontWeight: '900', color: NB.color.text, letterSpacing: -0.5, marginTop: 10 },
+
+  formTitle: { fontSize: 22, fontWeight: '900', color: NB.color.text, marginBottom: 4 },
+  formSubtitle: { fontSize: 14, color: NB.color.muted, fontWeight: '700', marginBottom: 24, lineHeight: 20 },
+
+  // Fields
+  fieldGroup: { marginBottom: 18 },
+  label: { fontSize: 13, fontWeight: '800', color: NB.color.text, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
+  inputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 24,
+    borderWidth: NB.border.regular,
+    borderColor: NB.color.border,
+    borderRadius: NB.radius.sm,
+    backgroundColor: NB.color.mutedBg,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 10,
   },
-  dividerLine: {
+  input: {
     flex: 1,
-    height: 1,
-    backgroundColor: '#e5e7eb',
+    fontSize: 15,
+    fontWeight: '700',
+    color: NB.color.text,
+    padding: 0,
+    margin: 0,
   },
-  dividerText: {
-    marginHorizontal: 16,
-    color: '#9ca3af',
-    fontSize: 14,
-  },
-  registerButton: {
-    backgroundColor: '#ffffff',
-    borderWidth: 2,
-    borderColor: '#6366f1',
-  },
-  registerButtonText: {
-    color: '#6366f1',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  skipButton: {
-    marginTop: 24,
-    alignItems: 'center',
-  },
-  skipButtonText: {
-    color: '#6b7280',
-    fontSize: 14,
-  },
-});
+  eyeBtn: { padding: 4 },
+  eyeIcon: { fontSize: 16 },
 
+  // Divider
+  divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 20, gap: 12 },
+  dividerLine: { flex: 1, height: NB.border.thin, backgroundColor: NB.color.border },
+  dividerText: { fontSize: 13, color: NB.color.muted, fontWeight: '700' },
+
+  footerNote: { fontSize: 12, color: NB.color.muted, fontWeight: '700', textAlign: 'center', marginTop: 24, lineHeight: 18 },
+});

@@ -8,14 +8,21 @@ import {
   Animated,
   Image,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/contexts/AuthContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { FlashcardCourse } from '../../_components/types';
 import { API_CONFIG, getCourseDetailUrl } from '@/constants/config';
+import { NB } from '@/constants/theme';
+import BrutalCard from '@/components/ui/ds/Card';
+import BrutalButton from '@/components/ui/ds/Button';
+import BrutalBadge from '@/components/ui/ds/Badge';
+import BrutalIcon from '@/components/ui/ds/BrutalIcon';
 
 const isVideoFile = (filename?: string | null) => {
   if (!filename) return false;
@@ -39,9 +46,7 @@ const PreviewVideo = ({ uri, style }: { uri: string; style: any }) => {
 
   useFocusEffect(
     React.useCallback(() => {
-      // screen focused
       return () => {
-        // screen blurred
         try {
           player.pause();
         } catch {}
@@ -56,6 +61,7 @@ const PreviewVideo = ({ uri, style }: { uri: string; style: any }) => {
       } catch {}
     };
   }, [player]);
+
   return (
     <VideoView
       player={player}
@@ -70,6 +76,7 @@ export default function FlashcardCourseDetailScreen() {
   const router = useRouter();
   const { courseId } = useLocalSearchParams<{ courseId: string }>();
   const { token } = useAuth();
+  const { t } = useLanguage();
 
   const [course, setCourse] = useState<FlashcardCourse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -164,8 +171,10 @@ export default function FlashcardCourseDetailScreen() {
   if (isLoading || !course) {
     return (
       <SafeAreaView style={[styles.safeArea, styles.center]} edges={['top', 'left', 'right']}>
-        <ActivityIndicator size="large" color="#6366f1" />
-        <Text style={styles.centerText}>Đang tải khóa học...</Text>
+        <BrutalCard style={styles.loadingCard}>
+          <ActivityIndicator size="large" color={NB.color.primary} />
+          <Text style={styles.loadingText}>{t('common.loading')}</Text>
+        </BrutalCard>
       </SafeAreaView>
     );
   }
@@ -176,109 +185,126 @@ export default function FlashcardCourseDetailScreen() {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <ScrollView contentContainerStyle={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.replace('/(tabs)/flashcards')} activeOpacity={0.7}>
-          <Text style={styles.backText}>← Trở lại</Text>
-        </TouchableOpacity>
-        <Text style={styles.title}>{course.title}</Text>
-        <Text style={styles.description}>{course.description}</Text>
-        <View style={styles.metaRow}>
-          {course.nameschool ? <Text style={styles.metaText}>🏫 {course.nameschool}</Text> : null}
-          {course.namecourse ? <Text style={styles.metaText}>📘 {course.namecourse}</Text> : null}
-        </View>
-      </View>
-
-      {quizzes.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyTitle}>Chưa có flashcard nào</Text>
-          <Text style={styles.emptyDescription}>
-            Hãy thêm flashcard để bắt đầu luyện tập.
-          </Text>
-        </View>
-      ) : (
-        <>
-          <TouchableOpacity activeOpacity={0.9} onPress={toggleFlip}>
-            <View style={styles.flipContainer}>
-              <Animated.View style={[styles.flipCard, frontAnimatedStyle]}>
-                <View style={styles.cardContent}>
-                  <Text style={styles.cardTitle}>{currentQuiz.definition}</Text>
-                  {currentQuiz.image ? (
-                    isVideoFile(currentQuiz.image) ? (
-                      <PreviewVideo uri={getMediaUrl(currentQuiz.image)} style={styles.cardVideo} />
-                    ) : (
-                      <Image
-                        source={{ uri: getMediaUrl(currentQuiz.image) }}
-                        style={styles.cardImage}
-                        resizeMode="contain"
-                      />
-                    )
-                  ) : null}
-                  <Text style={styles.flipHint}>Nhấn để xem mặt sau</Text>
-                </View>
-              </Animated.View>
-
-              <Animated.View style={[styles.flipCard, styles.flipCardBack, backAnimatedStyle]}>
-                <View style={styles.cardContent}>
-                  <Text style={styles.cardDescription}>{currentQuiz.mota}</Text>
-                  <Text style={styles.flipHint}>Nhấn để xem lại mặt trước</Text>
-                </View>
-              </Animated.View>
-            </View>
-          </TouchableOpacity>
-
-          <View style={styles.controls}>
-            <TouchableOpacity
-              style={[styles.controlButton, currentIndex === 0 && styles.controlDisabled]}
-              onPress={handlePrev}
-              disabled={currentIndex === 0}
-            >
-              <Text style={styles.controlText}>← Trước</Text>
-            </TouchableOpacity>
-            <Text style={styles.counter}>
-              {currentIndex + 1} / {quizzes.length}
-            </Text>
-            <TouchableOpacity
-              style={[
-                styles.controlButton,
-                currentIndex === quizzes.length - 1 && styles.controlDisabled,
-              ]}
-              onPress={handleNext}
-              disabled={currentIndex === quizzes.length - 1}
-            >
-              <Text style={styles.controlText}>Sau →</Text>
-            </TouchableOpacity>
+        {/* Header Section */}
+        <View style={styles.header}>
+          <View style={styles.backButtonWrap}>
+            <BrutalButton
+              label={`← ${t('common.back')}`}
+              variant="ghost"
+              size="sm"
+              onPress={() => router.replace('/(tabs)/flashcards')}
+            />
           </View>
-        </>
-      )}
+          <Text style={styles.title}>{course.title}</Text>
+          <Text style={styles.description}>{course.description}</Text>
+          <View style={styles.metaRow}>
+            {course.nameschool ? <BrutalBadge label={`🏫 ${course.nameschool}`} variant="primary" style={{ marginRight: 6 }} /> : null}
+            {course.namecourse ? <BrutalBadge label={`📘 ${course.namecourse}`} variant="accent" /> : null}
+          </View>
+        </View>
 
-      <View style={styles.actionRow}>
-        <TouchableOpacity
-          style={styles.secondaryAction}
-          onPress={() =>
-            router.push({
-              pathname: '/(tabs)/flashcards/course/[courseId]/quiz',
-              params: { courseId: String(courseId ?? '') },
-            } as never)
-          }
-          activeOpacity={0.85}
-        >
-          <Text style={styles.secondaryText}>Luyện tập Quiz</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.primaryAction}
-          onPress={() =>
-            router.push({
-              pathname: '/(tabs)/flashcards/course/[courseId]/edit',
-              params: { courseId: String(courseId ?? '') },
-            } as never)
-          }
-          activeOpacity={0.85}
-        >
-          <Text style={styles.primaryText}>Chỉnh sửa</Text>
-        </TouchableOpacity>
-      </View>
+        {quizzes.length === 0 ? (
+          <View style={styles.emptyState}>
+            <BrutalIcon name="flashcard" size={48} color={NB.color.text} />
+            <Text style={styles.emptyTitle}>{t('flashcards.emptyQuizTitle')}</Text>
+            <Text style={styles.emptyDescription}>
+              {t('flashcards.emptyQuizDesc')}
+            </Text>
+          </View>
+        ) : (
+          <>
+            {/* Flip Card Container */}
+            <TouchableOpacity activeOpacity={0.95} onPress={toggleFlip}>
+              <View style={styles.flipContainer}>
+                {/* Front Side */}
+                <Animated.View style={[styles.flipCard, frontAnimatedStyle]}>
+                  <View style={styles.cardContent}>
+                    <Text style={styles.cardTitle}>{currentQuiz.definition}</Text>
+                    {currentQuiz.image ? (
+                      <View style={styles.mediaFrame}>
+                        {isVideoFile(currentQuiz.image) ? (
+                          <PreviewVideo uri={getMediaUrl(currentQuiz.image)} style={styles.cardVideo} />
+                        ) : (
+                          <Image
+                            source={{ uri: getMediaUrl(currentQuiz.image) }}
+                            style={styles.cardImage}
+                            resizeMode="contain"
+                          />
+                        )}
+                      </View>
+                    ) : null}
+                    <BrutalBadge label={t('flashcards.flipHintFront')} variant="secondary" style={styles.flipHint} />
+                  </View>
+                </Animated.View>
 
-      <View style={{ height: 32 }} />
+                {/* Back Side */}
+                <Animated.View style={[styles.flipCard, styles.flipCardBack, backAnimatedStyle]}>
+                  <View style={styles.cardContent}>
+                    <Text style={styles.cardDescription}>{currentQuiz.mota}</Text>
+                    <BrutalBadge label={t('flashcards.flipHintBack')} variant="neutral" style={styles.flipHint} />
+                  </View>
+                </Animated.View>
+              </View>
+            </TouchableOpacity>
+
+            {/* Pagination Controls */}
+            <View style={styles.controls}>
+              <BrutalButton
+                label={`← ${t('common.previous')}`}
+                variant="ghost"
+                size="sm"
+                onPress={handlePrev}
+                disabled={currentIndex === 0}
+              />
+              <BrutalCard style={styles.counterCard} color={NB.color.mutedBg} padded={false}>
+                <Text style={styles.counter}>
+                  {currentIndex + 1} / {quizzes.length}
+                </Text>
+              </BrutalCard>
+              <BrutalButton
+                label={`${t('common.next')} →`}
+                variant="ghost"
+                size="sm"
+                onPress={handleNext}
+                disabled={currentIndex === quizzes.length - 1}
+              />
+            </View>
+          </>
+        )}
+
+        {/* Footer Actions */}
+        <View style={styles.actionRow}>
+          <View style={styles.actionCol}>
+            <BrutalButton
+              label={t('flashcards.quiz')}
+              variant="secondary"
+              size="lg"
+              onPress={() =>
+                router.push({
+                  pathname: '/(tabs)/flashcards/course/[courseId]/quiz',
+                  params: { courseId: String(courseId ?? '') },
+                } as never)
+              }
+              fullWidth
+            />
+          </View>
+          <View style={styles.actionCol}>
+            <BrutalButton
+              label={t('flashcards.edit')}
+              variant="primary"
+              size="lg"
+              onPress={() =>
+                router.push({
+                  pathname: '/(tabs)/flashcards/course/[courseId]/edit',
+                  params: { courseId: String(courseId ?? '') },
+                } as never)
+              }
+              fullWidth
+            />
+          </View>
+        </View>
+
+        <View style={{ height: 32 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -287,181 +313,166 @@ export default function FlashcardCourseDetailScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#f4f5ff',
+    backgroundColor: NB.color.bg,
   },
   container: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    backgroundColor: '#f4f5ff',
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    backgroundColor: NB.color.bg,
   },
   header: {
-    marginBottom: 16,
+    marginBottom: 24,
+    gap: 8,
   },
-  backText: {
-    color: '#6366f1',
-    fontWeight: '600',
+  backButtonWrap: {
+    alignSelf: 'flex-start',
     marginBottom: 8,
   },
   title: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1f2937',
-    marginBottom: 8,
+    fontSize: 26,
+    fontWeight: '900',
+    color: NB.color.text,
+    letterSpacing: -0.5,
   },
   description: {
     fontSize: 15,
-    color: '#4b5563',
-    marginBottom: 12,
+    fontWeight: '600',
+    color: NB.color.text,
+    lineHeight: 22,
   },
   metaRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-  },
-  metaText: {
-    fontSize: 12,
-    color: '#4b5563',
-    backgroundColor: '#e0e7ff',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
+    gap: 4,
+    marginTop: 4,
   },
   flipContainer: {
-    height: 380,
-    marginBottom: 16,
+    height: 400,
+    marginBottom: 24,
   },
   flipCard: {
     position: 'absolute',
     width: '100%',
     height: '100%',
     backfaceVisibility: 'hidden',
-    borderRadius: 18,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#e0e7ff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    borderRadius: NB.radius.md,
+    backgroundColor: NB.color.surface,
+    borderWidth: NB.border.thick,
+    borderColor: NB.color.border,
     overflow: 'hidden',
+    ...(Platform.OS === 'web' ? { boxShadow: '6px 6px 0px #111111' } : {}),
   },
   flipCardBack: {
-    backgroundColor: '#eef2ff',
+    backgroundColor: NB.color.primaryLight,
   },
   cardContent: {
     flex: 1,
-    padding: 20,
+    padding: 24,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 16,
   },
   cardTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#4338ca',
+    fontSize: 28,
+    fontWeight: '900',
+    color: NB.color.text,
     textAlign: 'center',
-    marginBottom: 16,
   },
   cardDescription: {
-    fontSize: 18,
-    color: '#312e81',
+    fontSize: 20,
+    fontWeight: '800',
+    color: NB.color.text,
     textAlign: 'center',
-    lineHeight: 26,
+    lineHeight: 28,
+  },
+  mediaFrame: {
+    width: '100%',
+    height: 220,
+    borderRadius: NB.radius.sm,
+    borderWidth: NB.border.regular,
+    borderColor: NB.color.border,
+    overflow: 'hidden',
+    backgroundColor: '#000000',
   },
   cardImage: {
     width: '100%',
-    height: 220,
-    borderRadius: 12,
-    marginBottom: 16,
-    backgroundColor: '#00000010',
+    height: '100%',
+    backgroundColor: NB.color.mutedBg,
   },
   cardVideo: {
     width: '100%',
-    height: 240,
-    borderRadius: 12,
-    marginBottom: 16,
+    height: '100%',
     backgroundColor: '#000000',
   },
   flipHint: {
-    fontSize: 12,
-    color: '#6b7280',
-    marginTop: 12,
+    marginTop: 8,
   },
   controls: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 24,
+    gap: 12,
   },
-  controlButton: {
-    backgroundColor: '#6366f1',
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 12,
-  },
-  controlDisabled: {
-    backgroundColor: '#d1d5db',
-  },
-  controlText: {
-    color: '#ffffff',
-    fontWeight: '600',
+  counterCard: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderWidth: NB.border.regular,
+    borderColor: NB.color.border,
   },
   counter: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1f2937',
+    fontSize: 15,
+    fontWeight: '900',
+    color: NB.color.text,
   },
   actionRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 12,
+    gap: 16,
+    marginTop: 8,
   },
-  secondaryAction: {
+  actionCol: {
     flex: 1,
-    backgroundColor: '#e0e7ff',
-    paddingVertical: 14,
-    borderRadius: 14,
-    alignItems: 'center',
-  },
-  secondaryText: {
-    color: '#4338ca',
-    fontWeight: '600',
-  },
-  primaryAction: {
-    flex: 1,
-    backgroundColor: '#6366f1',
-    paddingVertical: 14,
-    borderRadius: 14,
-    alignItems: 'center',
-  },
-  primaryText: {
-    color: '#ffffff',
-    fontWeight: '700',
   },
   emptyState: {
     paddingVertical: 60,
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: NB.color.surface,
+    borderWidth: NB.border.thick,
+    borderColor: NB.color.border,
+    borderRadius: NB.radius.md,
+    gap: 12,
+    padding: 24,
+    ...(Platform.OS === 'web' ? { boxShadow: '4px 4px 0px #111111' } : {}),
   },
   emptyTitle: {
     fontSize: 20,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: 8,
+    fontWeight: '900',
+    color: NB.color.text,
   },
   emptyDescription: {
     fontSize: 14,
-    color: '#6b7280',
+    fontWeight: '600',
+    color: NB.color.text,
     textAlign: 'center',
-    paddingHorizontal: 24,
+    lineHeight: 20,
   },
   center: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: NB.color.bg,
   },
-  centerText: {
-    marginTop: 12,
-    color: '#6b7280',
+  loadingCard: {
+    paddingVertical: 40,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: NB.color.text,
   },
 });
-
