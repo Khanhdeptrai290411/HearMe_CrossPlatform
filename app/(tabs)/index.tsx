@@ -125,15 +125,33 @@ export default function HomeScreen() {
           {[
             { 
               name: 'Quốc Khánh', 
-              role: 'Development Team Lead', 
+              role: 'Development Team Lead & AI Specialist', 
               image: '/Khanh.jpg', 
-              desc: 'Quốc Khánh leads our development team, bringing innovative technical solutions and AI-powered features to the platform.' 
+              desc: 'Quốc Khánh leads our technical development, specializing in designing and training advanced deep learning models (CNNs & Transformers) for high-accuracy, real-time sign language recognition.' 
             },
             { 
               name: 'Thảo Nguyên', 
-              role: 'Content Director', 
+              role: 'AI Product & UX Designer', 
               image: '/Nguyen.jpg', 
-              desc: 'Thảo Nguyên oversees all educational content at HearMe, bringing expertise in linguistics and pedagogy to create effective learning experiences.' 
+              desc: 'Thảo Nguyên researches and designs intuitive AI-human interaction interfaces, optimizing user accessibility and creating seamless user flows for real-time sign language translation.' 
+            },
+            { 
+              name: 'Hồng Anh', 
+              role: 'AI Research Engineer', 
+              image: '/HAnh.jpg', 
+              desc: 'Hồng Anh focuses on computer vision optimization, researching and tuning lightweight MediaPipe models to deliver seamless, low-latency landmark tracking.' 
+            },
+            { 
+              name: 'Tấn Phát', 
+              role: 'AI Full-Stack Developer', 
+              image: '/Phat.jpg', 
+              desc: 'Tấn Phát designs the system architecture, integrating complex machine learning pipelines into the frontend UI for a fast, responsive user experience.' 
+            },
+            { 
+              name: 'Anh Việt', 
+              role: 'Content Director & AI Curriculum Designer', 
+              image: '/Viet.jpg', 
+              desc: 'Anh Việt designs our curriculum, utilizing Natural Language Processing (NLP) and generative AI to create adaptive, highly personalized learning pathways.' 
             },
           ].map((member, index) => (
             <View key={index} style={styles.teamCard}>
@@ -208,21 +226,21 @@ export default function HomeScreen() {
           {[
             { 
               name: 'Anh Việt', 
-              role: 'Student', 
+              role: 'Student & AI Beta Tester', 
               image: '/Viet.jpg',
-              quote: 'HearMe has transformed how I communicate with my deaf cousin. The interactive lessons and practice tools made learning sign language enjoyable and effective.'
+              quote: 'HearMe\'s AI-driven feedback is incredible. The real-time camera tracking accurately analyzes my hand gestures and immediately points out how I can improve my sign language posture.'
             },
             { 
               name: 'Quốc Khánh', 
-              role: 'Special Education Teacher', 
+              role: 'Special Education Teacher & AI Collaborator', 
               image: '/Khanh.jpg',
-              quote: 'As an educator working with deaf students, I\'ve recommended HearMe to countless parents and colleagues. The structured curriculum and visual approach are perfect for beginners.'
+              quote: 'Integrating interactive AI into my sign language class has been a game-changer. The computer vision model acts like a dedicated assistant, helping each of my students practice individually.'
             },
             { 
               name: 'Thảo Nguyên', 
-              role: 'Healthcare Professional', 
+              role: 'Healthcare Professional & AI Researcher', 
               image: '/Nguyen.jpg',
-              quote: 'The community aspect of HearMe sets it apart from other language learning platforms. Being able to practice with other learners and get feedback from native signers has accelerated my progress.'
+              quote: 'Analyzing sign language gestures through machine learning models opened a new horizon for accessible healthcare communication. HearMe is a remarkable blend of technology and social impact.'
             },
           ].map((testimonial, index) => (
             <View key={index} style={styles.testimonialCard}>
@@ -440,6 +458,7 @@ const styles = StyleSheet.create({
   },
   teamGrid: {
     flexDirection: isTablet ? 'row' : 'column',
+    flexWrap: 'wrap',
     gap: isTablet ? 24 : 16,
     justifyContent: 'center',
     alignItems: 'stretch',

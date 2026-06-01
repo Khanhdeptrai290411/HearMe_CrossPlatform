@@ -16,7 +16,7 @@ const getLocalIP = (): string => {
   // Để tìm IP:
   // - Windows: chạy `ipconfig` trong CMD, tìm IPv4 Address
   // - Mac/Linux: chạy `ifconfig` hoặc `ip addr`
-  return '192.168.1.3'; // IP từ Wireless LAN adapter Wi-Fi
+  return '192.168.1.7'; // IP từ Wireless LAN adapter Wi-Fi
 };
 
 const normalizeAssetPath = (path: string): string => {

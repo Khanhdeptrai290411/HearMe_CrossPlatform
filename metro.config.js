@@ -8,13 +8,13 @@ const { URL } = require('url');
 const BACKEND_PROXY_TARGET =
   process.env.EXPO_BACKEND_PROXY ||
   process.env.BACKEND_URL ||
-  'http://192.168.1.3:8000';
+  'http://192.168.1.7:8000';
 
 const targetUrl = new URL(BACKEND_PROXY_TARGET);
 const httpClient = targetUrl.protocol === 'https:' ? https : http;
 
 function apiProxyMiddleware(req, res, next) {
-  if (!req.url.startsWith('/api/')) {
+  if (!req.url.startsWith('/api/') && !req.url.startsWith('/public/uploads/')) {
     return next();
   }
 

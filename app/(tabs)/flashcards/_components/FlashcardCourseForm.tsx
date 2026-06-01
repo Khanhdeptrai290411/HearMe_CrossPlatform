@@ -485,6 +485,7 @@ export function FlashcardCourseForm({ mode, courseId }: FlashcardCourseFormProps
           value={formData.title}
           onChangeText={value => handleInputChange('title', value)}
           placeholder="Ví dụ: ASL cơ bản"
+          placeholderTextColor="#9aa3b2"
         />
       </View>
 
@@ -495,6 +496,7 @@ export function FlashcardCourseForm({ mode, courseId }: FlashcardCourseFormProps
           value={formData.description}
           onChangeText={value => handleInputChange('description', value)}
           placeholder="Mô tả tổng quan về khóa học"
+          placeholderTextColor="#9aa3b2"
           multiline
           numberOfLines={4}
         />
@@ -508,6 +510,7 @@ export function FlashcardCourseForm({ mode, courseId }: FlashcardCourseFormProps
             value={formData.nameschool ?? ''}
             onChangeText={value => handleInputChange('nameschool', value)}
             placeholder="Ví dụ: HearMe Academy"
+            placeholderTextColor="#9aa3b2"
           />
         </View>
 
@@ -518,6 +521,7 @@ export function FlashcardCourseForm({ mode, courseId }: FlashcardCourseFormProps
             value={formData.namecourse ?? ''}
             onChangeText={value => handleInputChange('namecourse', value)}
             placeholder="Ví dụ: Khóa học cơ bản"
+            placeholderTextColor="#9aa3b2"
           />
         </View>
       </View>
@@ -541,6 +545,7 @@ export function FlashcardCourseForm({ mode, courseId }: FlashcardCourseFormProps
             value={quiz.definition}
             onChangeText={value => handleQuizChange(index, 'definition', value)}
             placeholder="Nội dung mặt trước"
+            placeholderTextColor="#9aa3b2"
           />
 
           <Text style={styles.label}>Giải thích *</Text>
@@ -549,6 +554,7 @@ export function FlashcardCourseForm({ mode, courseId }: FlashcardCourseFormProps
             value={quiz.mota}
             onChangeText={value => handleQuizChange(index, 'mota', value)}
             placeholder="Nội dung mặt sau"
+            placeholderTextColor="#9aa3b2"
             multiline
             numberOfLines={4}
           />
