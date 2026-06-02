@@ -4,11 +4,25 @@ const { getDefaultConfig } = require('expo/metro-config');
 const http = require('http');
 const https = require('https');
 const { URL } = require('url');
+const os = require('os');
+
+// Lấy IP Wi-Fi thực tế tự động, fallback về 192.168.1.10
+function getLocalIP() {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      if (iface.family === 'IPv4' && !iface.internal && iface.address.startsWith('192.168.')) {
+        return iface.address;
+      }
+    }
+  }
+  return '192.168.1.10';
+}
 
 const BACKEND_PROXY_TARGET =
   process.env.EXPO_BACKEND_PROXY ||
   process.env.BACKEND_URL ||
-  'http://192.168.1.7:8000';
+  `http://${getLocalIP()}:8000`;
 
 const targetUrl = new URL(BACKEND_PROXY_TARGET);
 const httpClient = targetUrl.protocol === 'https:' ? https : http;
